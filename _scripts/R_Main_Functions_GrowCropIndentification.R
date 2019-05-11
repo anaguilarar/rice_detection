@@ -1216,7 +1216,7 @@ timeseriesmetrics = function(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints, cro
     
     doi = as.Date(DateInt, "%Y%m%d")
     interval_90days = df_to_fit$x%in%doi:(doi-100)
-    interval_40days = df_to_fit$x%in%doi:(doi-50)
+    interval_40days = df_to_fit$x%in%doi:(doi-60)
     if((length(which(interval_90days))>3)){
 
       df_2condpoly = df_to_fit[interval_90days,]
@@ -1239,15 +1239,15 @@ timeseriesmetrics = function(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints, cro
       
       #### mean dif , sd and day of maximum
       
-      mean_val = mean(df_to_fit[interval_90days,"y"], na.rm = T)
+      #mean_val = mean(df_to_fit[interval_90days,"y"], na.rm = T)
       
       sd_val = sd(df_to_fit[interval_90days,"y"], na.rm = T)
       
-      max_val = max(df_to_fit[interval_90days,"y"], na.rm = T)
+      max_val = max(df_to_fit[interval_40days,"y"], na.rm = T)
       
-      min_val = min(df_to_fit[interval_90days,"y"], na.rm = T)
+      min_val = min(df_to_fit[interval_40days,"y"], na.rm = T)
       
-      dif_val = max_val - min_val
+      #dif_val = max_val - min_val
       
       df_to_fit40 = df_to_fit[interval_40days,]
       pos_max40daysbefore = df_to_fit[interval_40days,"y"] %in% max(df_to_fit[interval_40days,"y"], na.rm = T)
@@ -1258,20 +1258,20 @@ timeseriesmetrics = function(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints, cro
       
       day_ofminimum = abs(df_to_fit40[pos_min40daysbefore,"x"] - max(df_toprodict$x))[1]
       
-      summary_ts = data.frame(mean_ts = mean_val, 
+      summary_ts = data.frame(min_ts = min_val, 
+                              max_ts = max_val,
                  sd_ts = sd_val,
-                 dif_ts = dif_val,
                  maximumvi_day = day_ofmaximum,
                  minimumvi_day = day_ofminimum)
       
     }else{
       modelderi = rep(NA, 2)
       regression_vals= rep(NA, 7)
-      summary_ts = data.frame(mean_ts = NA, 
-                              sd_ts = NA,
-                              dif_ts = NA,
-                              maximumvi_day = NA,
-                              minimumvi_day = NA)
+      summary_ts =  data.frame(min_ts = NA, 
+                               max_ts = NA,
+                               sd_ts = NA,
+                               maximumvi_day = NA,
+                               minimumvi_day = NA)
     }
     
     #interval_60days = df_to_fit$x%in%doi:(doi-75)
@@ -1331,9 +1331,9 @@ timeseriesmetrics = function(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints, cro
     regression_vals= rep(NA, 7)
     rsquare_cross = rep(NA, length(width_values))
     df_to_fit = data.frame(id = NA,y = NA, x = NA)
-    summary_ts = data.frame(mean_ts = NA, 
+    summary_ts = data.frame(min_ts = NA, 
+                            max_ts = NA,
                             sd_ts = NA,
-                            dif_ts = NA,
                             maximumvi_day = NA,
                             minimumvi_day = NA)
     

@@ -111,10 +111,10 @@ data_date = do.call(rbind,lapply(c("20151127","20151211","20151228","20160114","
 }))
 
 
-m=ggplot(data_date, aes(capturing_date ,LSWI , colour=field_name, group = ID))+
+m=ggplot(data_date, aes(capturing_date ,NDVI , colour=field_name, group = ID))+
   geom_point()+geom_line(alpha = 0.8)+ facet_grid(rows = vars(class), cols = vars(date))
 
-ggsave(plot = m , filename = paste0("temp/testuncleanLSWIveg.jpg"),
+ggsave(plot = m , filename = paste0("temp/testuncleanNDVIveg.jpg"),
        width = 34, height = 25, units = "cm")
 rice_field = "21C919"
 
@@ -359,7 +359,18 @@ dataSmoothed = lapply(datestoEvaluate, function(DateInt){
       return(ValTableperIndex)
     }))
     row.names(derivativeValues)=row.names(data_reshape)
-    TableValuesToClassify = cbind(TableValuesToClassify,derivativeValues)
+    
+    ## get summaryvariables
+    
+    summaryValues=do.call(cbind,lapply(1:1,function(index){
+      ValTableperIndex=data.frame(do.call(rbind,lapply(lapply(KernelSmootValues,function(x){x[[index]]}),
+                                                       function(x){x$summary_ts})))
+      names(ValTableperIndex)=paste0(ListIndex[index],"_",names(ValTableperIndex))
+      return(ValTableperIndex)
+    }))
+    row.names(summaryValues)=row.names(data_reshape)
+    
+    TableValuesToClassify = cbind(TableValuesToClassify,derivativeValues,summaryValues)
     
     ####### Assign class label to data frame
     
@@ -452,35 +463,35 @@ graphic_smoothed = function(test, vi = "NDVI",  limitbottom = 0.1, limitup = 1){
 }
 
 
-test = TableValuesToClassify[,grepl(names(TableValuesToClassify), pattern = "NDVI_Da")]
-m = graphic_smoothed (test, vi = "NDVI")
+test = TableValuesToClassify[,grepl(names(TableValuesToClassify), pattern = "vi_day")]
+m = graphic_smoothed (test, vi = "NDVI",  limitbottom = 50, limitup = 0)
 
-ggsave(plot = m , filename = paste0("temp/Data_v8_1_NDVI_dates_veg2.png"),
+ggsave(plot = m , filename = paste0("temp/Data_v8_1_NDVI_days_veg2_.png"),
        width = 34, height = 25, units = "cm")
 
 m = graphic_smoothed (test, vi = "NDVI")
 
 test = TableValuesToClassify[,grepl(names(TableValuesToClassify), pattern = "NDVI_Da")]
 
-test = test[grepl(row.names(test),pattern = "11B011A_s_vegetative_d20151"),]
+test = test[grepl(row.names(test),pattern = "21D823_s_vegetative_d2015121"),]
 #test = test[grepl(row.names(test),pattern = "vegetative"),]
 graphic_smoothed (test, vi = "NDVI")
 #### add data to other
 
 TableValuesToClassify = TableValuesToClassify[!(TableValuesToClassify$class == "harvested" & grepl(row.names(TableValuesToClassify),pattern = "20151230")),]
 
-TableValuesToClassify = TableValuesToClassify[!(TableValuesToClassify$class == "ripening" & grepl(row.names(TableValuesToClassify),pattern = "20151230")),]
+TableValuesToClassify[(TableValuesToClassify$class == "ripening" & grepl(row.names(TableValuesToClassify),pattern = "20151230")),"class"] = "reproductive"
 
-TableValuesToClassify = TableValuesToClassify[!(TableValuesToClassify$class == "reproductive" & grepl(row.names(TableValuesToClassify),pattern = "p_11B011A_s_reproductive_d20160123")),]
+TableValuesToClassify[(TableValuesToClassify$class == "reproductive" & grepl(row.names(TableValuesToClassify),pattern = "p_11B011A_s_reproductive_d20160123")),"class"] = "ripening"
 
 
 bad_positions_late =  row.names(TableValuesToClassify[grepl(row.names(TableValuesToClassify),pattern = "11B011A_s_vegetative_d20151"),])
 TableValuesToClassify[row.names(TableValuesToClassify)%in%bad_positions_late,"class"] = "reproductive"
 
 bad_positions_rep = row.names(TableValuesToClassify[TableValuesToClassify$class %in%  "reproductive" & 
-                                                      (TableValuesToClassify$NDVI_Date_4<0.1),])
+                                                      (TableValuesToClassify$NDVI_Date_7<0.68),])
 
-other_data = c(bad_positions_late,bad_positions_rep)
+other_data = c(bad_positions_late,bad_positions_rep[grepl(bad_positions_rep, pattern = "1C914_")])
 
 TableValuesToClassify[row.names(TableValuesToClassify)%in%other_data,"class"] = "other"
 
@@ -534,14 +545,14 @@ ggsave(plot = graphic_s , filename = paste0("temp/cleanData_v8_1_NDVI_DacaVeg2.p
 test = training_data[,grepl(names(training_data), pattern = "NDVI_de")]
 
 ggplot(training_data, aes(NDVI_derivative_1,NDVI_derivative_2, color = class)) + 
-  geom_point()+xlim(-0.03,0.03)#+ylim(-0.03,0.02)
+  geom_point()#+xlim(-0.03,0.03)#+ylim(-0.03,0.02)
 
 
 bad_positions_early =  row.names(TableValuesToClassify[TableValuesToClassify$class %in%  "vegetative" & 
                                                         (TableValuesToClassify$NDVI_derivative_2 <= (-0.003)),])
 
 bad_positions_ripe = row.names(TableValuesToClassify[TableValuesToClassify$class %in%  "ripening" & 
-                                                       ((TableValuesToClassify$NDVI_derivative_3> (0.004)))
+                                                       ((TableValuesToClassify$NDVI_derivative_2> (0.001)))
                                                      ,])
 
 
@@ -555,9 +566,418 @@ training_data$class
 table(training_data$class)
 
 
-
 write.csv(training_data ,
           paste0("model_inputs/phen_identification/optical_data_ndvi_date_deri_veg.csv"))
+
+data_training = read.csv(paste0("model_inputs/phen_identification/optical_data_ndvi_date_deri_veg.csv"),row.names =1)
+
+data_training$class = as.character(data_training$class)
+data_training$class [data_training$class %in% c("Urban_Zones", "Water")] = "other"
+unique(data_training$class)
+
+###
+phasecolours = c ('harvested'='firebrick3', "ripening"="goldenrod", 
+                  "reproductive" = "darkgreen","vegetative" = "lightgreen", "soil" = "saddlebrown"
+)
+
+ggplot(data_training[data_training$class %in% c("harvested"),], aes(NDVI_derivative_1,NDVI_derivative_2, color = class)) + 
+  geom_point()+xlim(-0.03,0.04)+ylim(-0.045,0.04)+
+  scale_colour_manual(values = c ('harvested'='firebrick3', "ripening"="goldenrod", "other" = "gray", 
+                                  "vegetative"="lightgreen", "reproductive" = "darkgreen", "soil" = "saddlebrown"
+  )) + theme_bw() + labs (x = "initial_NDVI_derivative", y = "ending_NDVI_derivative", colour = "Classification")
+
+###
+
+
+ggplot(data_training[data_training$class %in% c("vegetative"),], aes(NDVI_maximumvi_day,NDVI_minimumvi_day, color = class)) + 
+  geom_point()+xlim(-0.10,60)+ylim(-0.10,60)+
+  scale_colour_manual(values = c ('harvested'='firebrick3', "ripening"="goldenrod", "other" = "gray", 
+                                  "vegetative"="lightgreen", "reproductive" = "darkgreen", "soil" = "saddlebrown"
+  )) + theme_bw() + labs (x = "maximum NDVI day", y = "minimum NDVI day", colour = "Classification")
+
+###
+
+ggplot(data_training[!data_training$class %in% c("other"),], aes(NDVI_min_ts,NDVI_max_ts, color = class)) + 
+  geom_point()+#xlim(-0.10,50)+ylim(-0.10,50)+
+  scale_colour_manual(values = c ('harvested'='firebrick3', "ripening"="goldenrod", "other" = "gray", 
+                                  "vegetative"="lightgreen", "reproductive" = "darkgreen", "soil" = "saddlebrown"
+  )) + theme_bw() + labs (x = "min NDVI", y = "max NDVI", colour = "Classification")
+
+ggplot(data_training[!data_training$class %in% c("other"),], aes(NDVI_sd_ts,NDVI_minimumvi_day, color = class)) + 
+  geom_point()+#xlim(-0.10,50)+ylim(-0.10,50)+
+  scale_colour_manual(values = c ('harvested'='firebrick3', "ripening"="goldenrod", "other" = "gray", 
+                                  "vegetative"="lightgreen", "reproductive" = "darkgreen", "soil" = "saddlebrown"
+  )) + theme_bw() + labs (x = "SD NDVI", y = "Average NDVI", colour = "Classification")
+
+
+
+### soil and other class
+data_other = data_training[data_training$class %in%c("soil","other","vegetative"),]
+
+mean_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,mean)
+
+sd_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,sd)
+dataplot = data.frame(mean_val, sd_val, class = data_other$class)
+ggplot(dataplot, aes(mean_val, sd_val, colour= class)) + geom_point() 
+
+othertochange = row.names(dataplot)[(dataplot$class %in% c("other"))&
+                                      (dataplot$sd_val< 0.15 & dataplot$sd_val > 0.02)&
+                                      (dataplot$mean_val> 0.02 & dataplot$mean_val < 0.5)]
+
+data_other = data_other[row.names(data_other)%in%othertochange,
+                        grepl(names(data_other), pattern = "Date")]
+
+othertochange = row.names(data_other)[data_other$NDVI_Date_7>0.35&
+                                        data_other$NDVI_Date_3<0.4&
+                                        data_other$NDVI_Date_3>0.2&
+                                        data_other$NDVI_Date_1<0.35&
+                                        data_other$NDVI_Date_1>0.2&
+                                        data_other$NDVI_Date_7<0.8&
+                                        data_other$NDVI_Date_4<0.5&
+                                        data_other$NDVI_Date_4>0.2&
+                                        data_other$NDVI_Date_5<0.5&
+                                        data_other$NDVI_Date_5>0.2]
+
+data_other$id = row.names(data_other)
+
+dataplot = reshape2::melt(data_other, by = "id")
+
+num_pos = regexpr(pattern = "_s_",dataplot$id)
+num_pos_end = regexpr(pattern = "_d2",dataplot$id)
+dataplot$class= str_sub(dataplot$id,num_pos+3, num_pos_end-1)
+
+ggplot(dataplot[dataplot$id %in%othertochange,], aes(group = id, variable, value, colour = class)) +geom_line()
+
+
+data_training = data_training[!row.names(data_training)%in%othertochange,]
+
+
+data_other = data_training[data_training$class %in%c("soil","other","vegetative"),]
+
+mean_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,mean)
+
+sd_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,sd)
+dataplot = data.frame(mean_val, sd_val, class = data_other$class)
+ggplot(dataplot, aes(mean_val, sd_val, colour= class)) + geom_point() 
+
+
+othertochange = row.names(dataplot)[(dataplot$class %in% c("other"))&
+                                      (dataplot$sd_val< 0.15 & dataplot$sd_val > 0.02)&
+                                      (dataplot$mean_val> 0.02 & dataplot$mean_val < 0.5)]
+
+data_other = data_other[row.names(data_other)%in%othertochange,
+                        grepl(names(data_other), pattern = "Date")]
+
+othertochange = row.names(data_other)[data_other$NDVI_Date_7<0.5&data_other$NDVI_Date_3<0.4&
+                                        data_other$NDVI_Date_7>0.2&data_other$NDVI_Date_2>0.25&
+                                        data_other$NDVI_Date_5<0.4&
+                                        data_other$NDVI_Date_1<0.4]
+
+data_other$id = row.names(data_other)
+
+dataplot = reshape2::melt(data_other, by = "id")
+
+num_pos = regexpr(pattern = "_s_",dataplot$id)
+num_pos_end = regexpr(pattern = "_d2",dataplot$id)
+dataplot$class= str_sub(dataplot$id,num_pos+3, num_pos_end-1)
+
+ggplot(dataplot[dataplot$id %in%othertochange,], aes(group = id, variable, value, colour = class)) +
+  geom_line()+ylim(0.1,0.8)
+
+dataplot[dataplot$id %in%othertochange & (dataplot$value>0.39),]
+
+data_training = data_training[!((row.names(data_training)%in%othertochange) & (data_training$NDVI_Date_7>0.39)),] 
+data_training$class[row.names(data_training)%in%othertochange] = "soil"
+
+data_training$class = factor(data_training$class, levels = c("vegetative","reproductive",
+                                                             "ripening","harvested","soil","other"))
+
+
+#############
+
+
+
+### reproductive soil
+data_other = data_training[data_training$class %in%c("reproductive","other","ripening"),]
+
+mean_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,mean)
+
+sd_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,sd)
+dataplot = data.frame(mean_val, sd_val, class = data_other$class)
+ggplot(dataplot, aes(mean_val, sd_val, colour= class)) + geom_point() 
+
+othertochange = row.names(dataplot)[(dataplot$class %in% c("reproductive","other","ripening"))&
+                                      (dataplot$sd_val< 0.15 & dataplot$sd_val > 0.06)&
+                                      (dataplot$mean_val> 0.5 & dataplot$mean_val < 0.65)]
+
+data_other = data_other[row.names(data_other)%in%othertochange,
+                        grepl(names(data_other), pattern = "Date")]
+
+data_other = data_other[data_other$NDVI_Date_7>0.55&
+                          data_other$NDVI_Date_4>0.65&
+                          data_other$NDVI_Date_3>0.4&
+                          data_other$NDVI_Date_3<0.61&
+                          data_other$NDVI_Date_5>0.6&
+                          data_other$NDVI_Date_1<0.45 &
+                          data_other$NDVI_Date_7<0.75,]
+
+data_other$id = row.names(data_other)
+
+dataplot = reshape2::melt(data_other, by = "id")
+
+num_pos = regexpr(pattern = "_s_",dataplot$id)
+num_pos_end = regexpr(pattern = "_d2",dataplot$id)
+dataplot$class= stringr::str_sub(dataplot$id,num_pos+3, num_pos_end-1)
+
+ggplot(dataplot, aes(group = id, variable, value, colour = class)) +geom_line()
+
+data_training = data_training[!row.names(data_training)%in%dataplot$id[grepl(dataplot$id, pattern = "other")],]
+
+
+#############33
+data_other = data_training[data_training$class %in%c("reproductive","other","ripening"),]
+
+mean_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,mean)
+
+sd_val= apply(data_other[,grepl(names(data_other), pattern = "Date")],1,sd)
+dataplot = data.frame(mean_val, sd_val, class = data_other$class)
+ggplot(dataplot, aes(mean_val, sd_val, colour= class)) + geom_point() 
+
+
+othertochange = row.names(dataplot)[(dataplot$class %in% c("reproductive","other","ripening"))&
+                                      (dataplot$sd_val< 0.16 & dataplot$sd_val > 0.06)&
+                                      (dataplot$mean_val> 0.5 & dataplot$mean_val < 0.7)]
+
+
+data_other = data_other[row.names(data_other)%in%othertochange,
+                        grepl(names(data_other), pattern = "Date")]
+
+
+data_other = data_other[data_other$NDVI_Date_7>0.64&
+                          data_other$NDVI_Date_4>0.65&
+                          data_other$NDVI_Date_3>0.6&
+                          data_other$NDVI_Date_5>0.63&
+                          data_other$NDVI_Date_1<0.55 &
+                          data_other$NDVI_Date_1>0.4 &
+                          data_other$NDVI_Date_6>0.63 &
+                          data_other$NDVI_Date_2<0.65 &
+                          data_other$NDVI_Date_7<0.75,]
+
+data_other$id = row.names(data_other)
+
+dataplot = reshape2::melt(data_other, by = "id")
+
+num_pos = regexpr(pattern = "_s_",dataplot$id)
+num_pos_end = regexpr(pattern = "_d2",dataplot$id)
+dataplot$class= stringr::str_sub(dataplot$id,num_pos+3, num_pos_end-1)
+
+ggplot(dataplot[dataplot$class %in% c("other" , "reproductive","ripening"),], aes(group = id, variable, value, colour = class)) +
+  geom_line()+geom_point()
+
+data_training = data_training[!row.names(data_training)%in%dataplot$id[grepl(dataplot$id, pattern = "reproductive")],] 
+
+
+datostochange = unique(dataplot[dataplot$class %in% c("other"),"id"])
+dataaux = data_training[row.names(data_training)%in%datostochange,]
+
+valsaux = apply(dataaux[dataaux$class %in% c("other"),c("NDVI_Date_4","NDVI_Date_5","NDVI_Date_6","NDVI_Date_7")],1,function(x){
+  mean(diff(x))
+})
+
+valsaux = names(valsaux[valsaux<0.02 & valsaux>-0.01])
+ggplot(dataplot[dataplot$id %in% valsaux,], aes(group = id, variable, value, colour = class)) +
+  geom_line()+geom_point()
+
+### delete and change
+todelete = dataplot$id[grepl(dataplot$id, pattern = "other") & (!dataplot$id%in%valsaux)]
+data_training = data_training[!row.names(data_training)%in%todelete,]
+
+data_training[row.names(data_training)%in%valsaux,"class"] = "ripening"
+
+
+
+table(data_training$class)
+#############
+
+get_featuresmin_maxvals = function(dataf){
+  ## number of features
+  num_features = ncol(dataf)
+  
+  #calculate minimun and maximun values
+  minmax_list =lapply(1:num_features, function(x){
+    
+    return(c(min(dataf[,x]),max(dataf[,x])))
+  })
+  
+  ### rename list
+  names(minmax_list) = names(dataf)
+  return(minmax_list)
+}
+# 
+feature_scaling =  function(feature, limits = c(0,1), type = "min_max"){
+  
+  ## calculate min max feature scaling
+  if(type == "min_max"){
+    feature_scaled = (feature  - limits[1])/(limits[2]-limits[1])
+  }
+  return(feature_scaled)
+}
+numfeatures = 14
+minmaxvalues = get_featuresmin_maxvals(data_training[!data_training$class%in%"other",1:numfeatures])
+dates_pos = grepl("Date", names(minmaxvalues))
+#
+# ###
+#
+min_dates = min(unlist(minmaxvalues[dates_pos]))
+max_dates = max(unlist(minmaxvalues[dates_pos]))
+#
+# ## calculate min max derivatives
+#
+deriva_pos = grepl("deriva", names(minmaxvalues))
+
+min_der = min(unlist(minmaxvalues[deriva_pos]))
+max_der = max(unlist(minmaxvalues[deriva_pos]))
+
+
+dates_scaled = do.call(cbind,lapply(which(dates_pos),function(x){
+  feature_scaling(data_training[,x], c(min_dates, max_dates))
+}))
+
+derivatives_scaled = do.call(cbind,lapply(which(deriva_pos),function(x){
+  feature_scaling(data_training[,x], c(min_der, max_der))
+}))
+
+summarize_scaled = do.call(cbind,lapply((1:numfeatures)[-c(which(dates_pos),which(deriva_pos))],
+                                        function(x){
+                                          
+  feature_scaling(data_training[,x], minmaxvalues[[x]])
+}))
+# feature_scaled = quantable::robustscale(data_training[,1:14])
+# 
+# dates_scaled_robust = do.call(cbind,lapply(1:14,function(x){
+#   feature_scaling(data_training[,x], type = "robust")
+# }))
+
+#
+# ##
+training_iter_scaled = data.frame(dates_scaled, derivatives_scaled,summarize_scaled,
+                                  class = data_training$class)
+
+# ## reassign names
+
+row.names(training_iter_scaled) = row.names(data_training)
+names(training_iter_scaled)[1:numfeatures] =
+  names(data_training)[1:numfeatures]
+
+pca_transform = FactoMineR::PCA(feature_scaled$data[,1:9],ncp = 3)
+data_toplot = data.frame(pca_transform$ind$contrib,class =data_training$class)
+
+
+datasub = data_toplot[!data_toplot$class%in%c("other","vegetative","soil"),]
+ggplot(datasub, aes(Dim.1,Dim.2, color = class)) + 
+  geom_point()+xlim(-0.000,0.002)+ylim(0.000,0.0012)
+
+datasub = data_toplot#[data_toplot$class%in%c("reproductive","vegetative","other"),]
+ggplot(datasub, aes(Dim.1,Dim.2, color = class)) + 
+  geom_point()#+xlim(-0.000,0.0025)+ylim(0.000,0.0015)
+
+ggplot(data_toplot, aes(Dim.1,Dim.2, color = class)) + 
+  geom_point()+xlim(-0.00,0.002)+ylim(0.000,0.0015)
+
+ggplot(data_toplot[data_toplot$class%in%c("reproductive","vegetative","other","ripening"),], 
+       aes(Dim.1,Dim.3, color = class)) + 
+  geom_point()+xlim(0.000,0.001)+ylim(0.000,0.002)
+
+ggplot(data_toplot, aes(Dim.2,Dim.3, color = class)) + 
+  geom_point()#+ylim(0.00125,0.004)+xlim(0.0001,0.0015)
+
+rowsto_delete = row.names(data_toplot)[(data_toplot$Dim.1>0.0005 & data_toplot$Dim.1<0.001) &
+                                         (data_toplot$Dim.2>0.0000 & data_toplot$Dim.2<0.0004) &
+                                         grepl(row.names(data_toplot),pattern = "other")]
+
+table(data_training$class)
+
+data_other = data_training
+
+
+
+data_other = data_other[data_other$NDVI_Date_1>0.4 ,
+                        grepl(names(data_other), pattern = "Date")]
+
+
+data_other$id = row.names(data_other)
+
+data_other = data_other[data_other$id %in%rowsto_delete,]
+
+data_other = data_other[data_other$NDVI_Date_7>0.60&
+                          data_other$NDVI_Date_4>0.65&
+                          data_other$NDVI_Date_3>0.6&
+                          data_other$NDVI_Date_5>0.63&
+                          data_other$NDVI_Date_1<0.65 &
+                          data_other$NDVI_Date_1>0.35 &
+                          data_other$NDVI_Date_6>0.63 &
+                          data_other$NDVI_Date_2<0.7&
+                          data_other$NDVI_Date_7<0.80,]
+
+dataplot = reshape2::melt(data_other, by = "id")
+
+num_pos = regexpr(pattern = "_s_",dataplot$id)
+num_pos_end = regexpr(pattern = "_d2",dataplot$id)
+dataplot$class= stringr::str_sub(dataplot$id,num_pos+3, num_pos_end-1)
+
+ggplot(dataplot, aes(group = id, variable, value, colour = class)) +
+  geom_line()+geom_point()
+
+# dim(data_training)
+data_training = data_training[!((row.names(data_training)%in% dataplot$id) & ( data_training$class%in%c("other"))),]
+table(data_training$class)
+
+
+
+rowsto_delete = row.names(data_toplot)[(data_toplot$Dim.1>0.0004 & data_toplot$Dim.1<0.0011) &
+                                         (data_toplot$Dim.2>0.0000 & data_toplot$Dim.2<0.0001) &
+                                         grepl(row.names(data_toplot),pattern = "other")]
+
+
+data_other = data_training
+
+
+
+data_other = data_other[ data_other$NDVI_Date_1<0.4,
+                         grepl(names(data_other), pattern = "Date")]
+
+
+
+data_other$id = row.names(data_other)
+
+data_other = data_other[data_other$id %in%rowsto_delete,]
+
+dataplot = reshape2::melt(data_other, by = "id")
+
+num_pos = regexpr(pattern = "_s_",dataplot$id)
+num_pos_end = regexpr(pattern = "_d2",dataplot$id)
+dataplot$class= stringr::str_sub(dataplot$id,num_pos+3, num_pos_end-1)
+
+ggplot(dataplot, aes(group = id, variable, value, colour = class)) +
+  geom_line()+geom_point()
+table(data_training[(row.names(data_training)%in% dataplot$id) , "class"])
+table(data_training$class)
+
+
+
+write.csv(data_training ,
+          paste0("model_inputs/phen_identification/optical_data_ndvi_date_deri_veg.csv"))
+
+
+
+
+
+
+
+
+
+
+########################
 
 
 library(plotly)

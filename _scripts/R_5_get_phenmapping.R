@@ -60,7 +60,7 @@ tiles = c("col_t1")
 ######## Select Images for the study: there are two critriums 1) dates 2) quality and 3) visual 
 
 DateInt="2018-04-24"
-
+summaryts = T
 
 
 ### interpolate multiple dates 
@@ -71,7 +71,7 @@ lapply(tiles, function(tile){
   
   
   dates_topredict = inventory$Date[CheckDateFormat(inventory$Date)>as.Date("2018-04-20") &
-                                     inventory$BadPixels < 12 &
+                                     inventory$BadPixels < 10 &
                                      CheckDateFormat(inventory$Date)<as.Date("2018-11-11")]
   
   if(tile == "north_tolima"){
@@ -86,6 +86,8 @@ lapply(tiles, function(tile){
   # 
   
   dates_topredict = dates_topredict[!is.na(dates_topredict)]
+  dates_topredict = c(dates_topredict[1],dates_topredict[2:length(dates_topredict)][diff(as.Date(dates_topredict))>4])
+  
   DateInt = as.character(dates_topredict)[4]
   lapply(as.character(dates_topredict), function(DateInt){
     cat(DateInt,' \n')
@@ -192,11 +194,12 @@ lapply(tiles, function(tile){
         plot(testImage)
         dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/xgboost_veg/'),showWarnings = F)
         
-        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/xgboost_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
+        #writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/xgboost_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
         
         ## random Forest
         load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg.RData")
         library(randomForest)
+        namesVar = row.names(model$importance)
         data_toclassrf = TableValuesToClassify_WithoutNA[,namesVar]
         
         
@@ -217,30 +220,48 @@ lapply(tiles, function(tile){
         library(e1071)
         load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_polynomial_phen_identification_veg.RData")
 
+        
+        numfeatures = length(namesVar)
         dates_pos = grepl("Date", names(model$min_maxvalues))
         
+
+        #
+        # ###
+        #
         min_dates = min(unlist(model$min_maxvalues[dates_pos]))
         max_dates = max(unlist(model$min_maxvalues[dates_pos]))
         # 
         # ## calculate min max derivatives
         # 
-        min_der = min(unlist(model$min_maxvalues[!dates_pos]))
-        max_der = max(unlist(model$min_maxvalues[!dates_pos]))
-        # 
-        # ## feature scaling
+        deriva_pos = grepl("deriva",  names(model$min_maxvalues))
         
-        ## scale data
+        min_der = min(unlist(model$min_maxvalue[deriva_pos]))
+        max_der = max(unlist(model$min_maxvalue[deriva_pos]))
+
         
         dates_scaled = do.call(cbind,lapply(which(dates_pos),function(x){
           feature_scaling(TableValuesToClassify_WithoutNA[,namesVar][,x], c(min_dates, max_dates))
         }))
         
-        derivatives_scaled = do.call(cbind,lapply(which(!dates_pos),function(x){
+        derivatives_scaled = do.call(cbind,lapply(which(deriva_pos),function(x){
           feature_scaling(TableValuesToClassify_WithoutNA[,namesVar][,x], c(min_der, max_der))
         }))
-
+        
         x_variables_scaled = data.frame(cbind(dates_scaled,
                                               derivatives_scaled))
+        
+        if(summaryts){
+          
+          summarize_scaled = do.call(cbind,lapply((1:numfeatures)[-c(which(dates_pos),which(deriva_pos))],function(x){
+            feature_scaling(TableValuesToClassify_WithoutNA[,namesVar][,x], model$min_maxvalue[[x]])
+          }))
+          
+          #
+          # ##
+          x_variables_scaled = data.frame(cbind(dates_scaled,summarize_scaled,
+                                                derivatives_scaled))
+          
+        }
         names(x_variables_scaled) = namesVar
         
         
@@ -268,7 +289,7 @@ lapply(tiles, function(tile){
         modelMethod="svm_radial"
         dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/svmradial_veg/'),showWarnings = F)
         
-        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/svmradial_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
+        #writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/svmradial_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
         
         
       }
@@ -292,3 +313,5 @@ data_rast = raster(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhi
 data_count = table(data_rast[])
 
 (data_count*100)/10000
+
+row.names(model$importance)[order(model$importance)]

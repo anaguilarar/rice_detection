@@ -86,7 +86,8 @@ evaluation_table= function(y_observed, y_predicted, list_params){
 
 get_data= function(training_set, 
          iteration, 
-         model = "rf"){
+         model = "rf",
+         summaryts = T){
   
   subset = training_set[training_set$kfold %in%iteration,]
   subset$kfold = NULL
@@ -100,7 +101,8 @@ get_data= function(training_set,
   #
 
   if(model == "svm_radial" | model == "svm_polynomial"){
-    minmaxvalues = get_featuresmin_maxvals(subset[,1:(ncol(subset)-2)])
+    numfeatures = (ncol(subset)-2)
+    minmaxvalues = get_featuresmin_maxvals(subset[!subset$class%in%"other",1:(ncol(subset)-2)])
     dates_pos = grepl("Date", names(minmaxvalues))
     #
     # ###
@@ -110,8 +112,10 @@ get_data= function(training_set,
     #
     # ## calculate min max derivatives
     #
-    min_der = min(unlist(minmaxvalues[!dates_pos]))
-    max_der = max(unlist(minmaxvalues[!dates_pos]))
+    deriva_pos = grepl("deriva",  names(minmaxvalues))
+    
+    min_der = min(unlist(minmaxvalues[deriva_pos]))
+    max_der = max(unlist(minmaxvalues[deriva_pos]))
     #
     # ## feature scaling
     #
@@ -130,6 +134,20 @@ get_data= function(training_set,
     training_iter_scaled = data.frame(dates_scaled, derivatives_scaled,
                                       class = subset$class,
                                       dataset = subset$dataset)
+    
+    
+    if(summaryts){
+      
+      summarize_scaled = do.call(cbind,lapply((1:numfeatures)[-c(which(dates_pos),which(deriva_pos))],function(x){
+        feature_scaling(subset[,x], minmaxvalues[[x]])
+      }))
+      
+      #
+      # ##
+      x_variables_scaled = data.frame(cbind(dates_scaled,summarize_scaled,
+                                            derivatives_scaled))
+      
+    }
     
     row.names(training_iter_scaled) = row.names(subset)
     names(training_iter_scaled)[1:(ncol(subset)-2)] =
@@ -182,7 +200,7 @@ read_backup=function(params,filename,default_params,path){
 random_forest_class = function (model_data, iterations, list_parameters_rf,
                                 read_backup = F,
                      save_backup = T, seed = 1,
-                     path = "/tunning_parameters/", nclusters = 2){
+                     filepath = "/tunning_parameters/", nclusters = 2){
   
   default_params = c("mtry", "ntree")
   file_backup = "rf_tunning.csv"
@@ -203,7 +221,7 @@ random_forest_class = function (model_data, iterations, list_parameters_rf,
   all_params =  apply(expand.grid(list_parameters_rf), 1, paste, collapse="_")
   
   ## filter those parameters thatwere already processed
-  all_params =read_backup(all_params,file_backup, path )
+  all_params =read_backup(all_params,file_backup,default_params , filepath )
   
   ## random params 
   all_params = str_split(all_params, pattern = "_")
@@ -218,11 +236,11 @@ random_forest_class = function (model_data, iterations, list_parameters_rf,
   
   sfExport("model_data");sfExport("ClassificationMetrics")
   sfExport("all_params");  sfExport("get_data")
-  sfExport("save_backup");sfExport("path")
+  sfExport("save_backup");sfExport("filepath")
   sfExport("iterations");sfExport("evaluation_table")
   sfExport("get_featuresmin_maxvals");sfExport("feature_scaling")
   sfExport("file_backup")
-  
+  dir.create(paste0(filepath,"temp/"))
   results = sfLapply( 1:length(all_params), function(params_i){
     results = do.call(rbind,lapply(1:iterations , function(iteration){
       ### organice data
@@ -244,19 +262,28 @@ random_forest_class = function (model_data, iterations, list_parameters_rf,
                          list_params = list(mtry = as.numeric(mtry_p), 
                                             ntree = as.numeric(ntree_p)))
       }))
+    
+    
       results$iteration = 1:iterations
       if(save_backup){
-        if(file.exists(paste0(path,file_backup))){
-          resultsprevious = read.csv(paste0(path,file_backup))
-          results = rbind(resultsprevious,results)
-        }
-        write.csv(results,paste0(path,file_backup),row.names = F)
+        
+        write.csv(results,paste0(filepath,"temp/param_",params_i,"_",file_backup),row.names = F)
       }
         
     })
+  filestoread = list.files(path = paste0(filepath,"temp/"),pattern = ".csv",full.names = T)
+  results = do.call(rbind,lapply(filestoread,read.csv))
   
+  if(save_backup){
+    if(file.exists(paste0(filepath,file_backup))){
+      resultsprevious = read.csv(paste0(filepath,file_backup))
+      results = rbind(resultsprevious,results)
+    }
+    write.csv(results,paste0(filepath,file_backup),row.names = F)
+  }
+  do.call(file.remove, list(list.files(paste0(filepath,"temp/"), full.names = TRUE)))
   print(Sys.time()-start)
-  stopCluster(cl)
+  sfStop()
       
 }
 
@@ -264,7 +291,7 @@ random_forest_class = function (model_data, iterations, list_parameters_rf,
 svm_radial_class = function (model_data, iterations, list_parameters_svm,
                                 read_backup = F,
                                 save_backup = T, seed = 1,
-                                path = "/tunning_parameters/", nclusters = 2){
+                             filepath = "/tunning_parameters/", nclusters = 2){
   
   default_params = c("gamma", "cost")
   file_backup = "svmradial_tunning.csv"
@@ -285,7 +312,7 @@ svm_radial_class = function (model_data, iterations, list_parameters_svm,
   all_params =  apply(expand.grid(list_parameters_svm), 1, paste, collapse="_")
   
   ## filter those parameters thatwere already processed
-  all_params =read_backup(all_params,file_backup, path )
+  all_params =read_backup(all_params,file_backup,default_params, filepath )
   
   ## random params 
   all_params = str_split(all_params, pattern = "_")
@@ -302,7 +329,7 @@ svm_radial_class = function (model_data, iterations, list_parameters_svm,
   
   sfExport("model_data");sfExport("ClassificationMetrics")
   sfExport("all_params");  sfExport("get_data")
-  sfExport("save_backup");sfExport("path")
+  sfExport("save_backup");sfExport("filepath")
   sfExport("iterations");sfExport("evaluation_table")
   sfExport("get_featuresmin_maxvals");sfExport("feature_scaling")
   sfExport("file_backup")
@@ -331,16 +358,25 @@ svm_radial_class = function (model_data, iterations, list_parameters_svm,
                                             cost = cost_p))
       }))
       results$iteration = 1:iterations
+      
+      results$iteration = 1:iterations
       if(save_backup){
-        if(file.exists(paste0(path,file_backup))){
-          resultsprevious = read.csv(paste0(path,file_backup))
-          results = rbind(resultsprevious,results)
-        }
-        write.csv(results,paste0(path,file_backup),row.names = F)
+        
+        write.csv(results,paste0(filepath,"temp/param_",params_i,"_",file_backup),row.names = F)
       }
       
-    })
+  })
+  filestoread = list.files(path = paste0(filepath,"temp/"),pattern = ".csv",full.names = T)
+  results = do.call(rbind,lapply(filestoread,read.csv))
   
+  if(save_backup){
+    if(file.exists(paste0(filepath,file_backup))){
+      resultsprevious = read.csv(paste0(filepath,file_backup))
+      results = rbind(resultsprevious,results)
+    }
+    write.csv(results,paste0(filepath,file_backup),row.names = F)
+  }
+  do.call(file.remove, list(list.files(paste0(filepath,"temp/"), full.names = TRUE)))
   print(Sys.time()-start)
   sfStop()
   
@@ -351,7 +387,7 @@ svm_radial_class = function (model_data, iterations, list_parameters_svm,
 svm_poly_class = function (model_data, iterations, list_parameters_svm,
                                     read_backup = F,
                                     save_backup = T, seed = 1,
-                                    path = "/tunning_parameters/", nclusters = 2){
+                           filepath = "/tunning_parameters/", nclusters = 2){
   
   default_params = c("gamma", "cost","degrees","coef0")
   file_backup = "svmpoly_tunning.csv"
@@ -374,7 +410,7 @@ svm_poly_class = function (model_data, iterations, list_parameters_svm,
   all_params =  apply(expand.grid(list_parameters_svm), 1, paste, collapse="_")
   
   ## filter those parameters thatwere already processed
-  all_params =read_backup(all_params,file_backup,default_params, path )
+  all_params =read_backup(all_params,file_backup,default_params, filepath )
   
   ## random params 
   all_params = str_split(all_params, pattern = "_")
@@ -391,7 +427,7 @@ svm_poly_class = function (model_data, iterations, list_parameters_svm,
   
   sfExport("model_data");sfExport("ClassificationMetrics")
   sfExport("all_params");  sfExport("get_data")
-  sfExport("save_backup");sfExport("path")
+  sfExport("save_backup");sfExport("filepath")
   sfExport("iterations");sfExport("evaluation_table")
   sfExport("get_featuresmin_maxvals");sfExport("feature_scaling")
   sfExport("file_backup")
@@ -430,17 +466,25 @@ svm_poly_class = function (model_data, iterations, list_parameters_svm,
     }))
     results$iteration = 1:iterations
     if(save_backup){
-      if(file.exists(paste0(path,file_backup))){
-        resultsprevious = read.csv(paste0(path,file_backup))
-        results = rbind(resultsprevious,results)
-      }
-      write.csv(results,paste0(path,file_backup),row.names = F)
+      
+      write.csv(results,paste0(filepath,"temp/param_",params_i,"_",file_backup),row.names = F)
     }
     
   })
+  filestoread = list.files(path = paste0(filepath,"temp/"),pattern = ".csv",full.names = T)
+  results = do.call(rbind,lapply(filestoread,read.csv))
   
+  if(save_backup){
+    if(file.exists(paste0(filepath,file_backup))){
+      resultsprevious = read.csv(paste0(filepath,file_backup))
+      results = rbind(resultsprevious,results)
+    }
+    write.csv(results,paste0(filepath,file_backup),row.names = F)
+  }
+  do.call(file.remove, list(list.files(paste0(filepath,"temp/"), full.names = TRUE)))
   print(Sys.time()-start)
- sfStop()
+  sfStop()
+
   
 }
 
@@ -449,7 +493,7 @@ svm_poly_class = function (model_data, iterations, list_parameters_svm,
 xgboost_class = function (model_data, iterations, list_parameters_xgboost,
                                   read_backup = F,
                                   save_backup = T, seed = 1,
-                                  path = "/tunning_parameters/", nclusters = 2){
+                          filepath = "/tunning_parameters/", nclusters = 2){
   
   default_params = c("eta", "max_depth","gamma","colsample","sub_sample")
   file_backup = "xgboost_tunning.csv"
@@ -474,7 +518,7 @@ xgboost_class = function (model_data, iterations, list_parameters_xgboost,
   all_params =  apply(expand.grid(list_parameters_xgboost), 1, paste, collapse="_")
   
   ## filter those parameters thatwere already processed
-  all_params =read_backup(all_params,file_backup,default_params, path )
+  all_params =read_backup(all_params,file_backup,default_params, filepath )
   
   ## random params 
   all_params = str_split(all_params, pattern = "_")
@@ -491,7 +535,7 @@ xgboost_class = function (model_data, iterations, list_parameters_xgboost,
   
   sfExport("model_data");sfExport("ClassificationMetrics")
   sfExport("all_params");  sfExport("get_data")
-  sfExport("save_backup");sfExport("path")
+  sfExport("save_backup");sfExport("filepath")
   sfExport("iterations");sfExport("evaluation_table")
   sfExport("get_featuresmin_maxvals");sfExport("feature_scaling")
   sfExport("file_backup")
@@ -540,17 +584,25 @@ xgboost_class = function (model_data, iterations, list_parameters_xgboost,
                                           colsample = col_p,
                                           sub_sample = sub_sample))
     }))
+
     results$iteration = 1:iterations
     if(save_backup){
-      if(file.exists(paste0(path,file_backup))){
-        resultsprevious = read.csv(paste0(path,file_backup))
-        results = rbind(resultsprevious,results)
-      }
-      write.csv(results,paste0(path,file_backup),row.names = F)
+      
+      write.csv(results,paste0(filepath,"temp/param_",params_i,"_",file_backup),row.names = F)
     }
     
   })
+  filestoread = list.files(path = paste0(filepath,"temp/"),pattern = ".csv",full.names = T)
+  results = do.call(rbind,lapply(filestoread,read.csv))
   
+  if(save_backup){
+    if(file.exists(paste0(filepath,file_backup))){
+      resultsprevious = read.csv(paste0(filepath,file_backup))
+      results = rbind(resultsprevious,results)
+    }
+    write.csv(results,paste0(filepath,file_backup),row.names = F)
+  }
+  do.call(file.remove, list(list.files(paste0(filepath,"temp/"), full.names = TRUE)))
   print(Sys.time()-start)
   sfStop()
   
@@ -564,7 +616,7 @@ xgboost_class = function (model_data, iterations, list_parameters_xgboost,
 setwd("D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/")
 
 
-data_training=read.csv(paste0("model_inputs/phen_identification/optical_data_ndvi_date_deriveg_5folds.csv"),row.names = 1)
+data_training=read.csv(paste0("model_inputs/phen_identification/optical_data_ndvi_date_deriveg_6folds.csv"),row.names = 1)
 table(data_training$kfold,data_training$class,data_training$dataset)
 dim(data_training)
 table(data_training$class)
@@ -587,37 +639,48 @@ data_training$class = as.character(data_training$class)
 #data_training$class[data_training$class%in%c("early_vegetative", "late_vegetative")]="vegetative"
 data_training$class = factor(data_training$class, levels = c("vegetative","reproductive",
                                                              "ripening","harvested","soil","other"))
+
+
+
 #######################################
+filepath = "classification_models/grid_search/"
 
+do.call(file.remove, list(list.files(paste0(filepath,"temp/"), full.names = TRUE)))
 
+list_parrf = list(mtry = c(2:9),
+                  ntree = c(200,500,800,1200,1800,2000,2200,2600,3000,3400,3600,3800))
 
-list_parrf = list(mtry = c(2:8),
-                  ntree = c(100,200,500,800,1200,1800,2400,3000))
-
-random_forest_class(model_data = data_training, iterations = 5,
+random_forest_class(model_data = data_training, iterations = 6,
                     list_parameters_rf = list_parrf,nclusters = 6,
-                    path = "classification_models/grid_search/")
+                    filepath = filepath)
 
-list_parsvm_radial = list(gamma = c(0.00001,0.00005,0.0001,0.0005,0.001,0.05,0.1,1,2,4),
-                          cost = c(32,64,128,216,512,1048,2056,4112,8224))
+list_parsvm_radial = list(gamma = c(0.00005,0.0001,0.0005,0.001,0.05,0.1,1,2,4),
+                          cost = c(32,64,128,216,512,1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,5600,6000))
 
-svm_radial_class(model_data = data_training, iterations = 5,list_parameters_svm = list_parsvm_radial,nclusters = 6,path = "classification_models/grid_search/")
+
+list_parsvm_radial = list(gamma = c(2,4),
+                          cost = c(32))
+
+
+svm_radial_class(model_data = data_training, iterations = 6,
+                 list_parameters_svm = list_parsvm_radial,nclusters = 6,
+                 filepath = filepath)
 
 
 list_parsvm_polynomial = list(gamma = c(0.05,0.1,1,2,4),
-                          cost = c(0.001,0.01,1,2,4,8,16,32,64,128,216,512,1048,2056,4112),
-                          degrees = c(2:3),
+                          cost = c(0.005,0.01,1,2,4,8,16,32,64,128,216,512,1048,2056),
+                          degrees = c(2:4),
                           coef0= c(0.05,0,2,4,8))
 
 
 
-svm_poly_class(model_data = data_training, iterations = 5,
+svm_poly_class(model_data = data_training, iterations = 6,
                         list_parameters_svm = list_parsvm_polynomial,
-                        nclusters = 7,path = "classification_models/grid_search/")
+                        nclusters = 7,filepath = filepath)
 
 
 
-list_xgboost_params = list(eta = c(0.1,0.01,0.001),
+list_xgboost_params = list(eta = c(0.01,0.1,0.01,0.005,0.001),
                            max_depth = c(2,4,8,16,24),
                            gamma = c(0.1,0.5,1,2,4),
                            colsample = c(0.5,0.7,0.9),
@@ -625,9 +688,9 @@ list_xgboost_params = list(eta = c(0.1,0.01,0.001),
 
 
 
-xgboost_class(model_data = data_training, iterations = 5,
+xgboost_class(model_data = data_training, iterations = 6,
                      list_parameters_xgboost = list_xgboost_params,
-                     nclusters = 7,path = "classification_models/grid_search/")
+                     nclusters = 7,filepath = filepath)
 
 
 
@@ -637,10 +700,6 @@ xgboost_class(model_data = data_training, iterations = 5,
 
 library(stringr)
 library(dplyr)
-alldata_sub = data_training
-
-alldata_sub = alldata[alldata$kfold%in%4,]
-len_id = str_sub(row.names(alldata_sub ),1,-1)
 
 alldata = data_training
 num_pos = regexpr(pattern = "_k",row.names(alldata))
@@ -673,21 +732,6 @@ grid_default <- expand.grid(
   subsample = 0.7
 )
 
-train_control <- caret::trainControl(
-  method = "none",
-  verboseIter = FALSE, # no training log
-  allowParallel = TRUE # FALSE for reproducible results 
-)
-
-xgb_model <- caret::train(
-  x = x_variables,
-  y = y_variable,
-  trControl = train_control,
-  tuneGrid = grid_default,
-  method = "xgbTree",
-  verbose = TRUE
-)
-
 
 varxgboost <- xgboost::xgb.DMatrix(as.matrix(x_variables), 
                                    label = as.numeric(y_variable)-1, missing = NA) 
@@ -701,7 +745,7 @@ mc_p = 1
 sub_sample = grid_default$subsample
 
 set.seed(1)
-xgmodfit = xgboost::xgb.train(list(eta = eta_p,
+model = xgboost::xgb.train(list(eta = eta_p,
                                    max_depth = mx_p,
                                    gamma = gam_p,
                                    colsample_bytree = col_p,
@@ -712,395 +756,116 @@ xgmodfit = xgboost::xgb.train(list(eta = eta_p,
                               nrounds = 400,
                               objective = "multi:softprob")
 
-ggplot(data_testmetrics, aes(type, value, color = model))+ geom_point(size = 3 )+theme_bw() +
-  labs( y = "f1 Score", x ="tipo de clasificación", colour = 'modelos')
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/xgboost_phen_identification_veg.RData")
+
+
+#### random forest
+
+grid_default <- expand.grid(
+  mtry = 5,
+  ntrees = 2200
+)
+
+mtry = grid_default$mtry
+ntree = grid_default$ntrees
+set.seed(1)
+model = randomForest::randomForest(x_variables, 
+                                   y_variable,
+                                   mtry = mtry, ntree = ntree)
+
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg.RData")
+
+
+#### random forest
+
+grid_default <- expand.grid(
+  mtry = 2,
+  ntrees = 2400
+)
+
+mtry = grid_default$mtry
+ntree = grid_default$ntrees
+set.seed(1)
+model = randomForest::randomForest(x_variables, 
+                                   y_variable,
+                                   mtry = mtry, ntree = ntree)
+
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg.RData")
+
+
+## svm polynomial
+
+minmaxvalues = get_featuresmin_maxvals(x_variables[!y_variable%in%5,])
+dates_pos = grepl("Date", names(minmaxvalues))
+
+
+min_dates = min(unlist(minmaxvalues[dates_pos]))
+max_dates = max(unlist(minmaxvalues[dates_pos]))
+# 
+# ## calculate min max derivatives
+# 
+deriva_pos = grepl("deriva",  names(model$min_maxvalues))
+
+min_der = min(unlist(minmaxvalues[deriva_pos]))
+max_der = max(unlist(minmaxvalues[deriva_pos]))
+
+
+dates_scaled = do.call(cbind,lapply(which(dates_pos),function(x){
+  feature_scaling(x_variables[,x], c(min_dates, max_dates))
+}))
+
+derivatives_scaled = do.call(cbind,lapply(which(deriva_pos),function(x){
+  feature_scaling(x_variables[,x], c(min_der, max_der))
+}))
+
+summarize_scaled = do.call(cbind,lapply((1:numfeatures)[-c(which(dates_pos),which(deriva_pos))],function(x){
+  feature_scaling(x_variables[,x], minmaxvalues[[x]])
+}))
+## scale data
 
 
 
+## data scaled
+x_variables_scaled = data.frame(cbind(dates_scaled,
+                                      derivatives_scaled,
+                                      summarize_scaled))
+names(x_variables_scaled) = names(x_variables)
 
+x_variables_scaled$y = y_variable
 
-list_parameters_rf
-do.call("paste", c(list_parameters_rf, sep = "_"))
+degreep = 2
+gamma_p = 0.1
+cost_p = 2
+coef0p = 4
 
+library(e1071)
+set.seed(1)
+svmfit = svm(y ~ ., data = x_variables_scaled, 
+             kernel = "polynomial",
+             degree = degreep,gamma = gamma_p,
+             cost = cost_p,
+             coef0=coef0p, 
+             scale = F)
 
-ggplot(data_training, aes(NDVI_derivative_1,NDVI_derivative_2, color = class)) + 
-  geom_point()+xlim(-0.03,0.07)#+ylim(-0.03,0.02)
+model = list(model = svmfit,
+             min_maxvalues = minmaxvalues)
 
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_polynomial_phen_identification_veg.RData")
 
-wrongid = row.names(data_training[(data_training$class == "reproductive") &(data_training$NDVI_derivative_3 < (-0.05)),])
+gamma_p = 0.0005
+cost_p = 1048
 
-stringr::str_sub(wrongid , 1,49)
+set.seed(1)
+svmfit = svm(y ~ ., data = x_variables_scaled,
+              kernel = "radial",
+             gamma = gamma_p,
+             cost = cost_p, 
+             scale = F)
 
-############3
-iteration = 1
+model = list(model = svmfit,
+             min_maxvalues = minmaxvalues)
 
-read_backup = T
-
-cl =  makeCluster(5)
-registerDoParallel(cl)
-Sys.time()->start
-
-
-model_data =  data_training
-quantile_imags = do.call(rbind,foreach(iteration = 1:5, 
-                                       .export = c("data_training","ClassificationMetrics"),
-                                       .packages=c('randomForest','stringr','xgboost','e1071')) %dopar% {
-  
-  subset = data_training[data_training$kfold %in%iteration,]
-  subset$kfold = NULL
-  ## 
-  training_data = subset[subset$dataset %in% "training",]
-  training_data$dataset = NULL
-  validation_data = subset[subset$dataset %in% "validation",]
-  validation_data$dataset = NULL
-  ########### RANDOM FOREST
-
-  #
-  x_training = training_data[,-ncol(training_data)]
-  x_validation = validation_data[,-ncol(validation_data)]
-
-  y_training = training_data[,ncol(training_data)]
-  y_training = as.numeric(y_training) - 1
-  y_validation = as.numeric(validation_data[,ncol(validation_data)])-1
-
-  first = T
-  mtry_p = 3
-  ntree_p = 200
-  for(mtry_p in 3:8){
-    for(ntree_p in c(200,500,800,1000,1200,1600,1800,2000,2200,2400))rr{
-      cat(mtry_p, " " , ntree_p, " ")
-
-      set.seed(1)
-      modelRF = randomForest::randomForest(x_training, as.factor(y_training), 
-                                           mtry = mtry_p, ntree = ntree_p)
-
-      predictedValues = unname(predict(modelRF,x_validation))
-
-      # testinfo = (validation_data[!y_validation ==predictedValues,])[
-      # grepl(row.names(validation_data[!y_validation ==predictedValues,]), pattern = "harvested"),]
-      #
-      # table(stringr::str_sub(row.names(testinfo),14,49))
-      # total_ = validation_data[
-      # grepl(row.names(validation_data), pattern = "harvested"),]
-      #    table(stringr::str_sub(row.names(total_),14,49))
-      CM=table(y_validation,predictedValues)
-      kappa = ClassificationMetrics(CM)[[1]]
-      accuracy = ClassificationMetrics(CM)[[2]]
-      preci = unlist(ClassificationMetrics(CM)[[3]])
-      names(preci) = paste0("precision_",1:length(preci))
-
-      recll = unlist(ClassificationMetrics(CM)[[4]])
-      names(recll) = paste0("recall_",1:length(recll))
-
-      f1sc = unlist(ClassificationMetrics(CM)[[5]])
-
-      names(f1sc) = paste0("f1scrore_",1:length(f1sc))
-
-      ClassificationMetrics(CM)
-      row_results = data.frame(iteration = iteration,mtry = mtry_p ,ntree =  ntree_p,
-                               kappa, accuracy, t(preci),t(recll),t(f1sc), f1micro = unlist(ClassificationMetrics(CM)[[6]]))
-
-
-      if(first){
-        results_table = row_results
-        first = F
-      }else{
-        results_table = rbind(results_table,
-                              row_results)
-      }
-
-      cat( " kappa_cohen:" , kappa," f1score: ", mean(f1sc),"\n")
-      rm(modelRF)
-
-    }
-
-  }
-  #
-  write.csv(results_table,paste0("classification_models/grid_search/rftuning", iteration, ".csv"))
-  #
-  # ############# SUPPORT VECTOR MACHINE
-  #
-  # #
-  # #
-  # #
-  #
-  minmaxvalues = get_featuresmin_maxvals(subset[,1:9])
-  dates_pos = grepl("Date", names(minmaxvalues))
-  #
-  # ###
-  #
-  min_dates = min(unlist(minmaxvalues[dates_pos]))
-  max_dates = max(unlist(minmaxvalues[dates_pos]))
-  #
-  # ## calculate min max derivatives
-  #
-  min_der = min(unlist(minmaxvalues[!dates_pos]))
-  max_der = max(unlist(minmaxvalues[!dates_pos]))
-  #
-  # ## feature scaling
-  #
-  first = T
-  #
-
-
-  ## scale data
-
-  dates_scaled = do.call(cbind,lapply(which(dates_pos),function(x){
-    feature_scaling(subset[,x], c(min_dates, max_dates))
-  }))
-
-  derivatives_scaled = do.call(cbind,lapply(which(!dates_pos),function(x){
-    feature_scaling(subset[,x], c(min_der, max_der))
-  }))
-  #
-  # ##
-  training_iter_scaled = data.frame(dates_scaled, derivatives_scaled,
-                                    class = subset$class,
-                                    dataset = subset$dataset)
-  # ## reassign names
-  #
-  row.names(training_iter_scaled) = row.names(subset)
-  names(training_iter_scaled)[1:9] =
-    names(subset)[1:9]
-
-  #
-  training_data = training_iter_scaled[training_iter_scaled$dataset %in% "training",]
-  training_data$dataset = NULL
-  validation_data = training_iter_scaled[training_iter_scaled$dataset %in% "validation",]
-  validation_data$dataset = NULL
-  #
-  x_training = training_data[,-ncol(training_data)]
-  x_validation = validation_data[,-ncol(validation_data)]
-
-  y_training = training_data[,ncol(training_data)]
-  y_training = as.numeric(y_training) - 1
-  y_validation = as.numeric(validation_data[,ncol(validation_data)])-1
-
-  data_trainingsvm = data.frame(x_training,y = as.factor(y_training))
-  #
-  #
-  #
-  # #### RADIAL
-  first = T
-  for(cost_p in c(32,64,128,216,512,1048,2056,4112,8224)){
-    cat(cost_p, '\n')
-    for(gamma_p in c(0.00001,0.00005,0.0001,0.0005,0.001,0.05,0.1,1,2,4)){
-
-      set.seed(1)
-      svmfit = svm(y ~ ., data = data_trainingsvm, kernel = "radial",gamma = gamma_p,cost = cost_p, scale = F)
-      #svmfit = svm(y ~ ., data = data_trainingsvm, kernel = "polynomial",degree = degreep,gamma = gamma_p,cost = cost_p,coef0=coef0p, scale = F)
-
-      predictedValues = unname(predict(svmfit,x_validation))
-
-      CM=table(y_validation,predictedValues)
-      kappa = ClassificationMetrics(CM)[[1]]
-      accuracy = ClassificationMetrics(CM)[[2]]
-      preci = unlist(ClassificationMetrics(CM)[[3]])
-      names(preci) = paste0("precision_",1:length(preci))
-
-      recll = unlist(ClassificationMetrics(CM)[[4]])
-      names(recll) = paste0("recall_",1:length(recll))
-
-      f1sc = unlist(ClassificationMetrics(CM)[[5]])
-      names(f1sc) = paste0("f1scrore_",1:length(f1sc))
-
-      results_scores = data.frame(iteration = iteration,gamma = gamma_p ,cost =  cost_p,kappa, accuracy, t(preci),t(recll),t(f1sc), f1micro = unlist(ClassificationMetrics(CM)[[6]]) )
-      if(first){
-        results_table = results_scores
-        first = F
-      }else{
-        results_table = rbind(results_table,
-                              results_scores)
-      }
-
-      cat( " kappa_cohen:" , kappa," f1score: ", mean(f1sc),"\n")
-      rm(svmfit)
-    }
-    write.csv(results_table,paste0("classification_models/grid_search/svm_radialtuning",iteration,".csv"))
-  }
-  write.csv(results_table,paste0("classification_models/grid_search/svm_radialtuning",iteration,".csv"))
-  #
-  # ##### polynomial kernel
-  #
-  gammagrid  = c(0.0001,0.0005,0.001,0.05,0.1,1,2,4)
-  costgrid = c(0.001,0.01,1,2,4,8,16,32,64,128,216,512,1048,2056,4112)
-  degrees = c(2:3)
-  coef0= c(0,0.05,0,2,4,8)
-  first = T
-  #
-  for(degreep in degrees){
-    cat(degreep, '***\n')
-    for(coef0p in c(0.05,0,2,4,8,16)){
-      for(cost_p in costgrid){
-        cat(cost_p, '\n')
-        for(gamma_p in gammagrid){
-
-          set.seed(1)
-          #svmfit = svm(y ~ ., data = data_trainingsvm, kernel = "radial basis",,gamma = gamma_p,cost = cost_p, scale = F)
-          svmfit = svm(y ~ ., data = data_trainingsvm, kernel = "polynomial",degree = degreep,gamma = gamma_p,cost = cost_p,coef0=coef0p, scale = F)
-
-          predictedValues = unname(predict(svmfit,x_validation))
-
-          CM=table(y_validation,predictedValues)
-          kappa = ClassificationMetrics(CM)[[1]]
-          accuracy = ClassificationMetrics(CM)[[2]]
-          preci = unlist(ClassificationMetrics(CM)[[3]])
-          names(preci) = paste0("precision_",1:length(preci))
-
-          recll = unlist(ClassificationMetrics(CM)[[4]])
-          names(recll) = paste0("recall_",1:length(recll))
-
-          f1sc = unlist(ClassificationMetrics(CM)[[5]])
-          names(f1sc) = paste0("f1scrore_",1:length(f1sc))
-
-          results_scores = data.frame(iteration = iteration,gamma = gamma_p ,cost =  cost_p, degree = degreep, coef0 = coef0p,kappa, accuracy, t(preci),t(recll),t(f1sc), f1micro = unlist(ClassificationMetrics(CM)[[6]]) )
-          if(first){
-            results_table = results_scores
-            first = F
-          }else{
-            results_table = rbind(results_table,
-                                  results_scores)
-          }
-
-          cat( " kappa_cohen:" , kappa," f1score: ", mean(f1sc),"\n")
-          rm(svmfit)
-        }
-      }
-    }
-    write.csv(results_table,paste0("classification_models/grid_search/svm_polynomialktuning",iteration,".csv"))
-  }
-
-  write.csv(results_table,paste0("classification_models/grid_search/svm_polynomialktuning",iteration,".csv"))
-  #
-  # ############GBTrees
-  
-  # first = T
-  eta_params = c(0.1,0.01,0.001)
-  max_depth_params = c(2,4,8,16,24)
-  gamma_params = c(0.1,0.5,1,2,4,8,16)
-  colsample_params = c(0.5,0.7,0.9)
-  sub_sample_params = c(0.7,1)
-  nrounds_params = c(200,400,800,1200)
-  # possible_comb = unlist(lapply(eta_params, function(x)
-  #   paste0(x, "_",unlist(lapply(max_depth_params, function(y) paste0(y,"_", gamma_params)))))) 
-  # 
-  # do_process = TRUE
-  # if(read_backup){
-  #   file_name = paste0("classification_models/grid_search/xboostingtuning",iteration,".csv")
-  #   if(file.exists(file_name)){
-  #     results_table = read.csv(file_name, row.names = 1)
-  #          process_done = unique(paste0(results_table$eta, "_", as.character(results_table$max_depth),"_", as.character(results_table$gamma)))
-  #     
-  #     if(length(possible_comb[!(possible_comb%in%process_done)])==0){
-  #       do_process = FALSE
-  #     }
-  #     first = F    
-  #   }else{
-  #     first = T
-  #   }
-  # }
-  x_training = training_data[,-ncol(training_data)]
-  x_validation = validation_data[,-ncol(validation_data)]
-
-  y_training = training_data[,ncol(training_data)]
-  y_training = as.numeric(y_training) - 1
-  y_validation = as.numeric(validation_data[,ncol(validation_data)])-1
-
-
-  x_training <- xgboost::xgb.DMatrix(as.matrix(x_training), label = y_training, missing = NA)
-  x_validation <- xgboost::xgb.DMatrix(as.matrix(x_validation),  missing = NA)
-  # 
-  # mc_p = 1
-  # eta_p = 1; mx_p =4; col_p =0.7; gam_p = 0; nround_p = 400
-  # if(do_process){
-  #   Sys.time()->start
-  #   for(eta_p in eta_params){
-  #     
-  #     for(mx_p in max_depth_params){
-  #       dosubprocess = TRUE  
-  #       
-  #       for(gam_p in gamma_params){
-  #         if(read_backup){
-  #           if(paste0(as.character(eta_p),"_",as.character(mx_p),"_",as.character(gam_p))%in%process_done){
-  #             dosubprocess = FALSE
-  #           }
-  #         }
-  #         if(dosubprocess){
-  #           for(col_p in colsample_params){
-  #             for(sub_p in sub_sample_params){
-  #               for(nround_p in nrounds_params){
-  #                 cat(eta_p, " " , mx_p, " " ,gam_p, " " ,col_p, " " ,mc_p, " " ,nround_p )
-  #                 
-  #                 set.seed(1)
-  #                 out <- xgboost::xgb.train(list(eta = eta_p,
-  #                                                max_depth = mx_p,
-  #                                                gamma = gam_p,
-  #                                                colsample_bytree = col_p,
-  #                                                min_child_weight = 1,
-  #                                                subsample = 1,
-  #                                                colsample_bytree = 0.5),
-  #                                           data = x_training,
-  #                                           num_class = length(unique(y_training)),
-  #                                           nrounds = nround_p,
-  #                                           objective = "multi:softprob")
-  #                 
-  #                 predictedValues = predict(out,x_validation)
-  #                 #xgb.plot.deepness(model = out)
-  #                 
-  #                 out <- matrix(predictedValues, ncol = 6, byrow = TRUE)
-  #                 out <- apply(out, 1, which.max)-1
-  #                 
-  #                 
-  #                 CM=table(y_validation,out)
-  #                 kappa = ClassificationMetrics(CM)[[1]]
-  #                 accuracy = ClassificationMetrics(CM)[[2]]
-  #                 preci = unlist(ClassificationMetrics(CM)[[3]])
-  #                 names(preci) = paste0("precision_",1:length(preci))
-  #                 
-  #                 recll = unlist(ClassificationMetrics(CM)[[4]])
-  #                 names(recll) = paste0("recall_",1:length(recll))
-  #                 
-  #                 f1sc = unlist(ClassificationMetrics(CM)[[5]])
-  #                 names(f1sc) = paste0("f1scrore_",1:length(f1sc))
-  #                 
-  #                 
-  #                 if(first){
-  #                   results_table = data.frame(iteration = iteration,eta = eta_p ,max_depth =  mx_p, gamma = gam_p, colsample_bytree = col_p, 
-  #                                              min_child_weight = mc_p, nrounds =nround_p, kappa, accuracy, t(preci),t(recll),t(f1sc), f1micro = unlist(ClassificationMetrics(CM)[[6]]) )
-  #                   first = F
-  #                 }else{
-  #                   results_table = rbind(results_table,
-  #                                         data.frame(iteration = iteration,eta = eta_p ,max_depth =  mx_p, gamma = gam_p, colsample_bytree = col_p, 
-  #                                                    min_child_weight = mc_p, nrounds =nround_p, kappa, accuracy, t(preci),t(recll),t(f1sc) , f1micro = unlist(ClassificationMetrics(CM)[[6]])))
-  #                 }
-  #                 
-  #                 cat( " kappa_cohen:" , kappa," f1score: ", mean(f1sc),"\n")
-  #                 rm(out)
-  #               }
-  #               
-  #             }
-  #           }
-  #           cat("\n")
-  #           print(Sys.time()-start)
-  #         }
-  #         write.csv(results_table,paste0("classification_models/grid_search/xboostingtuning", iteration, ".csv"))
-  #       }
-  #     }  
-  #     
-  #   }
-  #      
-  #   
-  #   write.csv(results_table,paste0("classification_models/grid_search/xboostingtuning", iteration, ".csv"))
-  #   
-  # }
-  # 
-  
-})
-
-stopCluster(cl)
-
-
-
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_radial_phen_identification_veg.RData")
 
 
 
