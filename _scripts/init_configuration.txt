@@ -1,0 +1,5 @@
+main_folder='D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/'
+sentinel2_images='D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/satellite_imagery/s2_processed/'
+sentinel1_images='D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/satellite_imagery/s1_processed/'
+landsat_images='D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/satellite_imagery/landsat_processed/'
+inventory_folder='D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/quality_info/'
