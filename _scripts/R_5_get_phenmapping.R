@@ -55,7 +55,7 @@ PackageReading(libs)
 
 indexes = c("NDVI")
 tile = "col_t2"
-tiles = c("col_t1")
+tiles = c("col_t2","col_t1")
 #tiles = c("north_tolima")
 ######## Select Images for the study: there are two critriums 1) dates 2) quality and 3) visual 
 
@@ -178,7 +178,7 @@ lapply(tiles, function(tile){
         # 
         rm(vi_images)
         # # predict
-        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/xgboost_phen_identification_veg.RData")
+        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/xgboost_phen_identification_veg_newfeatures.RData")
         library(xgboost)
         model_ML=model
         namesVar=model_ML$feature_names
@@ -194,10 +194,10 @@ lapply(tiles, function(tile){
         plot(testImage)
         dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/xgboost_veg/'),showWarnings = F)
         
-        #writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/xgboost_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
+        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/xgboost_veg/',tile,"_",modelMethod,"_ndvits_summary_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),".tif"), format="GTiff",overwrite=T)
         
         ## random Forest
-        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg.RData")
+        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg_newfeatures.RData")
         library(randomForest)
         namesVar = row.names(model$importance)
         data_toclassrf = TableValuesToClassify_WithoutNA[,namesVar]
@@ -213,12 +213,12 @@ lapply(tiles, function(tile){
         plot(testImage)
         modelMethod="rf"
         dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/rf_veg/'),showWarnings = F)
-        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/rf_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
+        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/',modelMethod,'_veg/',tile,"_",modelMethod,"_ndvits_summary_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),".tif"), format="GTiff",overwrite=T)
         
         ## svm poly
 
         library(e1071)
-        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_polynomial_phen_identification_veg.RData")
+        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_polynomial_phen_identification_veg_newfeatures.RData")
 
         
         numfeatures = length(namesVar)
@@ -258,8 +258,8 @@ lapply(tiles, function(tile){
           
           #
           # ##
-          x_variables_scaled = data.frame(cbind(dates_scaled,summarize_scaled,
-                                                derivatives_scaled))
+          x_variables_scaled = data.frame(cbind(dates_scaled,derivatives_scaled,summarize_scaled
+                                                ))
           
         }
         names(x_variables_scaled) = namesVar
@@ -273,12 +273,12 @@ lapply(tiles, function(tile){
         testImage[as.numeric(row.names(TableValuesToClassify_WithoutNA))]=predictedValues
         plot(testImage)
         modelMethod="svm_pol"
-        dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/svm_veg/'),showWarnings = F)
+        dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/',modelMethod,'_veg/'),showWarnings = F)
         
-        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/svm_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
+        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/',modelMethod,'_veg/',tile,"_",modelMethod,"_ndvits_summary_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),".tif"), format="GTiff",overwrite=T)
         
         ## svm radial
-        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_radial_phen_identification_veg.RData")
+        load( file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_radial_phen_identification_veg_newfeatures.RData")
         predictedValues = as.numeric(unname(predict(model$model,x_variables_scaled)))
         
         
@@ -287,9 +287,9 @@ lapply(tiles, function(tile){
         testImage[as.numeric(row.names(TableValuesToClassify_WithoutNA))]=predictedValues
         plot(testImage)
         modelMethod="svm_radial"
-        dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/svmradial_veg/'),showWarnings = F)
+        dir.create(paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/',modelMethod,'_veg/'),showWarnings = F)
         
-        #writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/svmradial_veg/',tile,"filled_",modelMethod,"_conf8_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),"ndvi_testveg.tif"), format="GTiff",overwrite=T)
+        writeRaster(testImage, filename=paste0('D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/model_ouputs/growth_stages/',tile,'/',modelMethod,'_veg/',tile,"_",modelMethod,"_ndvits_summary_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),".tif"), format="GTiff",overwrite=T)
         
         
       }

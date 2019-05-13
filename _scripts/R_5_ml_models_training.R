@@ -85,12 +85,14 @@ evaluation_table= function(y_observed, y_predicted, list_params){
 
 
 get_data= function(training_set, 
-         iteration, 
+         iteration = NA, 
          model = "rf",
          summaryts = T){
-  
-  subset = training_set[training_set$kfold %in%iteration,]
-  subset$kfold = NULL
+  if(!is.na(iteration)){
+    subset = training_set[training_set$kfold %in%iteration,]
+    subset$kfold = NULL
+  }
+
   ## 
   training_data = subset[subset$dataset %in% "training",]
   training_data$dataset = NULL
@@ -126,7 +128,7 @@ get_data= function(training_set,
       feature_scaling(subset[,x], c(min_dates, max_dates))
     }))
     
-    derivatives_scaled = do.call(cbind,lapply(which(!dates_pos),function(x){
+    derivatives_scaled = do.call(cbind,lapply(which(deriva_pos),function(x){
       feature_scaling(subset[,x], c(min_der, max_der))
     }))
     #
@@ -144,9 +146,9 @@ get_data= function(training_set,
       
       #
       # ##
-      x_variables_scaled = data.frame(cbind(dates_scaled,
-                                            derivatives_scaled,
-                                            summarize_scaled))
+      training_iter_scaled = data.frame(dates_scaled, derivatives_scaled,summarize_scaled,
+                                        class = subset$class,
+                                        dataset = subset$dataset)
       
     }
     
@@ -299,8 +301,8 @@ svm_radial_class = function (model_data, iterations, list_parameters_svm,
   
   if(unique(is.na(list_parameters_svm))){
     list_parameters_svm = list(
-      gamma = round((ncol(model_data)-1)/3),
-      ntree =500
+      gamma = 2,
+      cost =512
     )
     
   }
@@ -338,7 +340,7 @@ svm_radial_class = function (model_data, iterations, list_parameters_svm,
   results = sfLapply( 1:length(all_params), function(params_i){
     results = do.call(rbind,lapply(1:iterations , function(iteration){
       ### organice data
-        data_split = get_data(model_data, iteration, "svm_radial")
+        data_split = get_data(training_set = model_data,iteration =   iteration, model = "svm_radial")
         gamma_p = as.numeric(all_params[[as.character(params_i)]][1])
         cost_p = as.numeric(all_params[[as.character(params_i)]][2])
         
@@ -648,31 +650,31 @@ filepath = "classification_models/grid_search/"
 
 do.call(file.remove, list(list.files(paste0(filepath,"temp/"), full.names = TRUE)))
 
-list_parrf = list(mtry = c(4:13),
-                  ntree = c(200,500,800,1200,1800,2000,2200,2600,3000,3400,3600,3800))
+list_parrf = list(mtry = c(2:3),
+                  ntree = c(200,500,800,1200,1800,2000,2200,2600,3000,3400))
 
 random_forest_class(model_data = data_training, iterations = 6,
                     list_parameters_rf = list_parrf,nclusters = 6,
                     filepath = filepath)
 
-list_parsvm_radial = list(gamma = c(0.000001,0.000005,0.00001,0.00005,0.0001,0.0005,0.001,0.05,0.1,1,2),
-                          cost = c(64,128,216,512,1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,5600,6000))
+list_parsvm_radial = list(gamma = c(0.0001,0.0005,0.001,0.05,0.1,1,2,4),
+                          cost = c(64,128,216,512,1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,6000,7000))
 
 
 
-list_parsvm_radial = list(gamma = c(0.00000001,0.00000005,0.0000001,0.0000005,0.000001,0.000005,0.00001,0.00005,0.0001),
-                          cost = c(1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,5600,6000,7000,8000,9000,10000,15000))
+list_parsvm_radial = list(gamma = c(0.000001,0.000005,0.00001,0.00005),
+                          cost = c(1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,6000,7000))
 
 
 
 svm_radial_class(model_data = data_training, iterations = 6,
-                 list_parameters_svm = list_parsvm_radial,nclusters = 7,
+                 list_parameters_svm = list_parsvm_radial,nclusters = 6,
                  filepath = filepath)
 
 
-list_parsvm_polynomial = list(gamma = c(0.01,0.05,0.1,1,2),
+list_parsvm_polynomial = list(gamma = c(0.0005,0.01,0.05,0.1,1,2),
                           cost = c(0.005,0.01,1,2,4,8,16,32,64,128,216),
-                          degrees = c(2:4),
+                          degrees = c(2:3),
                           coef0= c(0.05,0,2,4,8))
 
 
@@ -683,9 +685,9 @@ svm_poly_class(model_data = data_training, iterations = 6,
 
 
 
-list_xgboost_params = list(eta = c(0.01,0.1,0.01,0.005,0.001),
+list_xgboost_params = list(eta = c(0.01,0.1,0.01,0.001),
                            max_depth = c(2,4,8,16,20),
-                           gamma = c(0.1,0.5,1,2,4),
+                           gamma = c(0.01,0.1,0.5,1,2,4),
                            colsample = c(0.5,0.7,0.9),
                            sub_sample = c(0.7,1))
 
@@ -727,10 +729,10 @@ x_variables = alldata[,-ncol(alldata)]
 
 grid_default <- expand.grid(
   nrounds = 400,
-  max_depth = 16,
+  max_depth = 8,
   eta = 0.01,
-  gamma = 2,
-  colsample_bytree = 0.5,
+  gamma = 4,
+  colsample_bytree = 0.7,
   min_child_weight = 1,
   subsample = 0.7
 )
@@ -759,14 +761,14 @@ model = xgboost::xgb.train(list(eta = eta_p,
                               nrounds = 400,
                               objective = "multi:softprob")
 
-save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/xgboost_phen_identification_veg.RData")
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/xgboost_phen_identification_veg_newfeatures.RData")
 
 
 #### random forest
 
 grid_default <- expand.grid(
-  mtry = 5,
-  ntrees = 2200
+  mtry = 4,
+  ntrees = 1200
 )
 
 mtry = grid_default$mtry
@@ -776,9 +778,9 @@ model = randomForest::randomForest(x_variables,
                                    y_variable,
                                    mtry = mtry, ntree = ntree)
 
-save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg.RData")
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg_newfeatures.RData")
 
-
+row.names(model$importance)[order(model$importance)]
 #### random forest
 
 grid_default <- expand.grid(
@@ -793,25 +795,32 @@ model = randomForest::randomForest(x_variables,
                                    y_variable,
                                    mtry = mtry, ntree = ntree)
 
-save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg.RData")
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg_newfeatures.RData")
 
 
-## svm polynomial
+## svm polynomial and Radial
+summaryts = T
 
-minmaxvalues = get_featuresmin_maxvals(x_variables[!y_variable%in%5,])
+numfeatures = (ncol(x_variables))
+minmaxvalues = get_featuresmin_maxvals(x_variables[!as.character(y_variable)%in%"5",])
 dates_pos = grepl("Date", names(minmaxvalues))
-
-
+#
+# ###
+#
 min_dates = min(unlist(minmaxvalues[dates_pos]))
 max_dates = max(unlist(minmaxvalues[dates_pos]))
-# 
+#
 # ## calculate min max derivatives
-# 
-deriva_pos = grepl("deriva",  names(model$min_maxvalues))
+#
+deriva_pos = grepl("deriva",  names(minmaxvalues))
 
 min_der = min(unlist(minmaxvalues[deriva_pos]))
 max_der = max(unlist(minmaxvalues[deriva_pos]))
+#
+# ## feature scaling
+#
 
+## scale data
 
 dates_scaled = do.call(cbind,lapply(which(dates_pos),function(x){
   feature_scaling(x_variables[,x], c(min_dates, max_dates))
@@ -820,24 +829,37 @@ dates_scaled = do.call(cbind,lapply(which(dates_pos),function(x){
 derivatives_scaled = do.call(cbind,lapply(which(deriva_pos),function(x){
   feature_scaling(x_variables[,x], c(min_der, max_der))
 }))
+#
+# ##
+training_iter_scaled = data.frame(dates_scaled, derivatives_scaled)
 
-summarize_scaled = do.call(cbind,lapply((1:numfeatures)[-c(which(dates_pos),which(deriva_pos))],function(x){
-  feature_scaling(x_variables[,x], minmaxvalues[[x]])
-}))
+
+if(summaryts){
+  
+  summarize_scaled = do.call(cbind,lapply((1:numfeatures)[-c(which(dates_pos),which(deriva_pos))],function(x){
+    feature_scaling(x_variables[,x], minmaxvalues[[x]])
+  }))
+  
+  #
+  # ##
+  training_iter_scaled = data.frame(dates_scaled, derivatives_scaled,summarize_scaled)
+  
+}
+
+row.names(training_iter_scaled) = row.names(x_variables)
+names(training_iter_scaled) =
+  names(x_variables)
 ## scale data
 
 
 
 ## data scaled
-x_variables_scaled = data.frame(cbind(dates_scaled,
-                                      derivatives_scaled,
-                                      summarize_scaled))
-names(x_variables_scaled) = names(x_variables)
+x_variables_scaled = training_iter_scaled
 
 x_variables_scaled$y = y_variable
 
 degreep = 2
-gamma_p = 0.1
+gamma_p = 0.05
 cost_p = 2
 coef0p = 4
 
@@ -853,10 +875,10 @@ svmfit = svm(y ~ ., data = x_variables_scaled,
 model = list(model = svmfit,
              min_maxvalues = minmaxvalues)
 
-save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_polynomial_phen_identification_veg.RData")
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_polynomial_phen_identification_veg_newfeatures.RData")
 
-gamma_p = 0.0005
-cost_p = 1048
+gamma_p = 0.0001
+cost_p = 3600
 
 set.seed(1)
 svmfit = svm(y ~ ., data = x_variables_scaled,
@@ -868,7 +890,7 @@ svmfit = svm(y ~ ., data = x_variables_scaled,
 model = list(model = svmfit,
              min_maxvalues = minmaxvalues)
 
-save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_radial_phen_identification_veg.RData")
+save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/svm_radial_phen_identification_veg_newfeatures.RData")
 
 
 
