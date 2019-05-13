@@ -144,8 +144,9 @@ get_data= function(training_set,
       
       #
       # ##
-      x_variables_scaled = data.frame(cbind(dates_scaled,summarize_scaled,
-                                            derivatives_scaled))
+      x_variables_scaled = data.frame(cbind(dates_scaled,
+                                            derivatives_scaled,
+                                            summarize_scaled))
       
     }
     
@@ -647,28 +648,30 @@ filepath = "classification_models/grid_search/"
 
 do.call(file.remove, list(list.files(paste0(filepath,"temp/"), full.names = TRUE)))
 
-list_parrf = list(mtry = c(2:9),
+list_parrf = list(mtry = c(4:13),
                   ntree = c(200,500,800,1200,1800,2000,2200,2600,3000,3400,3600,3800))
 
 random_forest_class(model_data = data_training, iterations = 6,
                     list_parameters_rf = list_parrf,nclusters = 6,
                     filepath = filepath)
 
-list_parsvm_radial = list(gamma = c(0.00005,0.0001,0.0005,0.001,0.05,0.1,1,2,4),
-                          cost = c(32,64,128,216,512,1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,5600,6000))
+list_parsvm_radial = list(gamma = c(0.000001,0.000005,0.00001,0.00005,0.0001,0.0005,0.001,0.05,0.1,1,2),
+                          cost = c(64,128,216,512,1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,5600,6000))
 
 
-list_parsvm_radial = list(gamma = c(2,4),
-                          cost = c(32))
+
+list_parsvm_radial = list(gamma = c(0.00000001,0.00000005,0.0000001,0.0000005,0.000001,0.000005,0.00001,0.00005,0.0001),
+                          cost = c(1048,2000,2400,2800,3200,3600,4000,4400,4800,5200,5600,6000,7000,8000,9000,10000,15000))
+
 
 
 svm_radial_class(model_data = data_training, iterations = 6,
-                 list_parameters_svm = list_parsvm_radial,nclusters = 6,
+                 list_parameters_svm = list_parsvm_radial,nclusters = 7,
                  filepath = filepath)
 
 
-list_parsvm_polynomial = list(gamma = c(0.05,0.1,1,2,4),
-                          cost = c(0.005,0.01,1,2,4,8,16,32,64,128,216,512,1048,2056),
+list_parsvm_polynomial = list(gamma = c(0.01,0.05,0.1,1,2),
+                          cost = c(0.005,0.01,1,2,4,8,16,32,64,128,216),
                           degrees = c(2:4),
                           coef0= c(0.05,0,2,4,8))
 
@@ -676,12 +679,12 @@ list_parsvm_polynomial = list(gamma = c(0.05,0.1,1,2,4),
 
 svm_poly_class(model_data = data_training, iterations = 6,
                         list_parameters_svm = list_parsvm_polynomial,
-                        nclusters = 7,filepath = filepath)
+                        nclusters = 6,filepath = filepath)
 
 
 
 list_xgboost_params = list(eta = c(0.01,0.1,0.01,0.005,0.001),
-                           max_depth = c(2,4,8,16,24),
+                           max_depth = c(2,4,8,16,20),
                            gamma = c(0.1,0.5,1,2,4),
                            colsample = c(0.5,0.7,0.9),
                            sub_sample = c(0.7,1))
@@ -690,7 +693,7 @@ list_xgboost_params = list(eta = c(0.01,0.1,0.01,0.005,0.001),
 
 xgboost_class(model_data = data_training, iterations = 6,
                      list_parameters_xgboost = list_xgboost_params,
-                     nclusters = 7,filepath = filepath)
+                     nclusters = 5,filepath = filepath)
 
 
 

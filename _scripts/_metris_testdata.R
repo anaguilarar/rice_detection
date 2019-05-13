@@ -13,9 +13,11 @@ red_data_test = data_test[,!names(data_test)%in%c("departamento","cultivo","lote
 data_fields = melt(red_data_test,id.vars = "id")
 data_fields$value = as.Date(data_fields$value,format = "%m/%d/%Y")
 data_fields$id = paste0(data_fields$id ,"_2018")
+phasecolours = c ('harvested'='firebrick3', "ripening"="goldenrod", 
+                  "reproductive" = "darkgreen","vegetative" = "lightgreen", "soil" = "saddlebrown", "other" = "gray"
+)
 
-
-data_growth_stages  = read.csv("D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/test_data/valledupar/dates_classified_col_t2_xgboost_veg.csv",row.names = 1)
+data_growth_stages  = read.csv("D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/test_data/valledupar/dates_classified_col_t2_rf_veg.csv",row.names = 1)
 
 id_field = "vall_el diamante lote 25_2018"
 
@@ -38,10 +40,7 @@ lapply(unique(data_fields$id)[grepl(unique(data_fields$id), pattern = "diaman")]
   
   m = ggplot()+
     geom_col(data = data_perfield_plot,aes(date,value, fill = variable),position = "stack", width = 1.5)+
-    scale_fill_manual(values = c ('harvested'='firebrick3', "ripening"="goldenrod", "other" = "gray", 
-                                  "early_vegetative"="cyan4", "reproductive" = "darkgreen","vegetative" = "chartreuse3",
-                                  "soil" = "saddlebrown"
-    ))+geom_vline(xintercept = as.Date(as.character(data_fieldsplot$value)), color = c("blue"))
+    scale_fill_manual(values = phasecolours)+geom_vline(xintercept = as.Date(as.character(data_fieldsplot$value)), color = c("blue"))
   m = m + labs(x ="date",y = "Pixels (%)", fill = "Classification")+ theme_bw() +ggtitle(str_sub(id_field,6)) +
     geom_text( data=data_fieldsplot, mapping=aes(x=as.Date(as.character(data_fieldsplot$value)), y=0, label=variable), size=3, angle=90, vjust=-0.4, hjust=0)
   print(m)
@@ -133,11 +132,11 @@ data_tocompare = do.call(rbind,lapply(1:length(data_splitted), function(z){
   data_perfield = data_perfield[order(data_perfield$value),]
   
   if(!T%in% is.na(data_perfield$value)){
-    data_soil = data.frame(id =data_perfield$id[1] , dates = (data_perfield$value[1]-15):
-                             data_perfield$value[data_perfield$variable%in%"fecha_emergencia"],
+    data_soil = data.frame(id =data_perfield$id[1] , dates = (data_perfield$value[1]-5):
+                             data_perfield$value[data_perfield$variable%in%"fecha_siembra"],
                            stage = "soil")
     
-    data_early = data.frame(id =data_perfield$id[1] , dates = (data_perfield$value[data_perfield$variable%in%"fecha_emergencia"]+1):
+    data_early = data.frame(id =data_perfield$id[1] , dates = (data_perfield$value[data_perfield$variable%in%"fecha_siembra"]+2):
                               (data_perfield$value[data_perfield$variable%in%"maximo_macollamiento"]-5),
                             stage = "vegetative")
     
@@ -152,11 +151,11 @@ data_tocompare = do.call(rbind,lapply(1:length(data_splitted), function(z){
                             stage = "reproductive")
     
     data_ripe = data.frame(id =data_perfield$id[1] , 
-                           dates = (data_perfield$value[(data_perfield$variable%in%"floracion_100")]+15):(data_perfield$value[data_perfield$variable%in%"cosecha"]+3),
+                           dates = (data_perfield$value[(data_perfield$variable%in%"floracion_100")]+15):(data_perfield$value[data_perfield$variable%in%"cosecha"]+5),
                            stage = "ripening")
     
     data_harvested = data.frame(id =data_perfield$id[1] , 
-                                dates = (data_perfield$value[(data_perfield$variable%in%"cosecha")]+4):(data_perfield$value[data_perfield$variable%in%"cosecha"]+20),
+                                dates = (data_perfield$value[(data_perfield$variable%in%"cosecha")]+6):(data_perfield$value[data_perfield$variable%in%"cosecha"]+15),
                                 stage = "harvested")
     
     
@@ -166,6 +165,99 @@ data_tocompare = do.call(rbind,lapply(1:length(data_splitted), function(z){
   
   
 }))
+
+ground_data = read.csv("D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/test_data/valledupar/Ground_truth_data_rice_2018_valle.csv")
+
+red_data_test = ground_data[,!names(ground_data)%in%c("departamento","cultivo","lote","latitud","longitud","variedad","num","id_tile","area")]
+
+data_fields = melt(red_data_test,id.vars = "id")
+data_fields$value = as.Date(data_fields$value,format = "%m/%d/%Y")
+data_fields$id = paste0(data_fields$id ,"_2018")
+phasecolours = c ('harvested'='firebrick3', "ripening"="goldenrod", 
+                  "reproductive" = "darkgreen","vegetative" = "lightgreen", "soil" = "saddlebrown", "other" = "gray"
+)
+
+
+phasecolours = c ('harvested'='firebrick3', "ripening"="goldenrod", 
+                  "reproductive" = "darkgreen","vegetative" = "olivedrab2", "soil" = "saddlebrown", "other" = "gray"
+)
+
+data_growth_stages  = read.csv("D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/test_data/valledupar/dates_classified_col_t2_rf_veg.csv",row.names = 1)
+
+id_field = "vall_el diamante lote 25_2018"
+
+
+
+lapply(unique(data_fields$id)[grepl(unique(data_fields$id), pattern = "diaman")], function(id_field){
+  
+  data_perfield = data_growth_stages[data_growth_stages$field_name %in% paste0(id_field),]
+  data_perfield = data_perfield[, !names(data_perfield)%in% c("nodata" )]
+  
+  data_perfield_plot= melt(data_perfield, id.vars = c("field_name","date","tile"))
+  
+  
+  data_fieldsplot = data_fields[data_fields$id %in% id_field,] 
+  # data_fieldsplot = data_fields[data_fields$id %in% "vall_el diamante lote 4a_2018",] 
+  # data_fieldsplot = data_fields[data_fields$id %in% "vall_el diamante lote 5_2018",]
+  
+  
+
+  data_perfield_plot$date = as.Date(as.character(data_perfield_plot$date), format = "%Y%m%d")
+  #data_fieldsplot$percentage = max(data_perfield_plot$value)
+
+  subfieldclassified = data_perfield_plot[,-3]
+  names(subfieldclassified) = c("id","dates","stage","value")
+  subfieldclassified$type = "Model Classification"
+  
+  field_subrange = data_tocompare[paste0(as.character(data_tocompare$id),"_2018")%in%id_field,]
+  field_subrange$type = "Ground Data"
+  field_subrange$value = -25
+  field_subrange$dates = as.Date(field_subrange$dates, origin = "1970-01-01")
+  plot_realvspredict = rbind(subfieldclassified, field_subrange)
+  plot_realvspredict$type = factor(plot_realvspredict$type,c("Model Classification", "Ground Data" ))
+  m = ggplot(data = field_subrange, aes(dates, value, fill = stage))+geom_col(position = "stack", width = 1, alpha = .90)
+  
+  m = m + geom_col(data = subfieldclassified, aes(dates, value, fill = stage),color= "white",position = "stack", width = 2)+
+    scale_fill_manual(values = phasecolours) +theme_bw()+
+    labs(x ="date",y = "Pixels (%)", fill = "Classification")+ theme_bw() 
+  
+  data_fieldsplot$stage = "vegetative"
+  data_fieldsplot$val = seq(0,-24,by = -4)
+  # names(data_fieldsplot)[2] = "stage" 
+  m + geom_text(data =data_fieldsplot, 
+                aes(x=as.Date(as.character(value)), y=val,label = as.character(variable)),
+                color = "black",size=3, angle=0, vjust=0, hjust=0)+
+
+    geom_segment(data = data_fieldsplot,aes(x = as.Date(as.character(data_fieldsplot$value)), y = 0, xend = as.Date(as.character(data_fieldsplot$value)), yend = val))
+  
+    geom_vline(xintercept = as.Date(as.character(data_fieldsplot$value)), color = c("blue"))
+    #facet_grid(type~., scales="free",margins = "Model Classification")
+
+  g1
+  #geom_vline(xintercept = as.Date(as.character(data_fieldsplot$value)), color = c("blue"))
+  geom_text( data=data_fieldsplot, mapping=aes(x=as.Date(as.character(data_fieldsplot$value)), y=0, label=variable), size=3, angle=90, vjust=-0.4, hjust=0)
+  p2 = ggplot(field_subrange, aes(dates, value, fill = stage))+geom_col(position = "stack", width = 1)+
+    scale_fill_manual(values = phasecolours)
+  
+  
+  
+  library(egg)
+  library(gtable)
+  g2 <- ggplotGrob(p1)
+  g3 <- ggplotGrob(p2)
+  g <- rbind(g2, g3, size = "first")
+  g$widths <- unit.pmax(g2$widths, g3$widths)
+  grid.newpage()
+  grid.draw(g)
+  
+  ggarrange(p1, p2, heights = 2:1)
+  
+  print(m)
+  
+  
+  
+})
+
 
 
 

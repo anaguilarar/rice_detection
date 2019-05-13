@@ -336,8 +336,9 @@ data_training = rbind(dataRice,data_otherTypes)
 
 data_training$class = as.character(data_training$class)
 ###
+table(data_training$kfold,data_training$class,data_training$dataset)
 
 write.csv( data_training,
-          paste0("model_inputs/phen_identification/optical_data_ndvi_date_deriveg_6folds.csv"))
+          paste0("model_inputs/phen_identification/optical_data_ndvi_date_deriveg_6folds_tssum.csv"))
 
 
