@@ -627,7 +627,7 @@ table(data_training$class)
 
 
 
-table(data_training$kfold,data_training$class,data_training$dataset)
+write.csv(table(data_training$kfold,data_training$class,data_training$dataset),"graphics/trainingandvalidationdata.csv")
 
 
 
@@ -674,7 +674,7 @@ svm_radial_class(model_data = data_training, iterations = 6,
 
 list_parsvm_polynomial = list(gamma = c(0.0005,0.01,0.05,0.1,1,2),
                           cost = c(0.005,0.01,1,2,4,8,16,32,64,128,216),
-                          degrees = c(2:3),
+                          degrees = c(4:5),
                           coef0= c(0.05,0,2,4,8))
 
 
@@ -761,24 +761,34 @@ model = xgboost::xgb.train(list(eta = eta_p,
                               nrounds = 400,
                               objective = "multi:softprob")
 
-save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/xgboost_phen_identification_veg_newfeatures.RData")
-
-
+names(varxgboost)
+xgb.importance(names(x_variables),model)
+#save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/xgboost_phen_identification_veg_newfeatures.RData")
+corrplot::corrplot(matrixcor)
+matrixcor = cor(x_variables[,1:(ncol(x_variables)-2)])
 #### random forest
 
 grid_default <- expand.grid(
-  mtry = 4,
+  mtry = 2,
   ntrees = 1200
 )
+
+library(randomForestExplainer)
 
 mtry = grid_default$mtry
 ntree = grid_default$ntrees
 set.seed(1)
 model = randomForest::randomForest(x_variables, 
                                    y_variable,
-                                   mtry = mtry, ntree = ntree)
+                                   mtry = mtry, ntree = ntree,localImp = TRUE)
 
-save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg_newfeatures.RData")
+min_depth_frame = min_depth_distribution(model) 
+plot_min_depth_distribution(min_depth_frame)
+importance_frame = measure_importance(model)
+
+plot_multi_way_importance(importance_frame, size_measure = "no_of_nodes")
+
+#save(model, file = "D:/OneDrive - Universidad Nacional de Colombia/MScPhil/phen_identification/classification_models/rf_phen_identification_veg_newfeatures.RData")
 
 row.names(model$importance)[order(model$importance)]
 #### random forest

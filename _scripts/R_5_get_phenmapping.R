@@ -54,40 +54,42 @@ PackageReading(libs)
 ### set vegetation indexes names
 
 indexes = c("NDVI")
-tile = "col_t2"
+tile = "north_tolima"
 tiles = c("col_t2","col_t1")
 #tiles = c("north_tolima")
 ######## Select Images for the study: there are two critriums 1) dates 2) quality and 3) visual 
 
-DateInt="2018-04-24"
+DateInt="2016-09-06"
 summaryts = T
+
+start_date = "2016-06-10"
+end_date = "2016-11-11"
+dates_percent = 10
+dates_percent = 37
 
 
 ### interpolate multiple dates 
 lapply(tiles, function(tile){
-  PercMaxBadPixels=40
-  
-  inventory = get_inventory(tile)
-  
-  
-  dates_topredict = inventory$Date[CheckDateFormat(inventory$Date)>as.Date("2018-04-20") &
-                                     inventory$BadPixels < 10 &
-                                     CheckDateFormat(inventory$Date)<as.Date("2018-11-11")]
-  
+  PercMaxBadPixels=50
   if(tile == "north_tolima"){
     PercMaxBadPixels=38.7
-    
-    dates_topredict = inventory$Date[CheckDateFormat(inventory$Date)>as.Date("2017-05-18") &
-                                       inventory$BadPixels < 38 &
-                                       CheckDateFormat(inventory$Date)<as.Date("2017-11-30")]
+    dates_percent = 38
+
     
   }
+  inventory = get_inventory(tile)
+  inventory$BadPixels[is.na( inventory$BadPixels)] = 100
+  dates_topredict = inventory$Date[CheckDateFormat(inventory$Date)>as.Date(start_date) &
+                                     inventory$BadPixels < dates_percent &
+                                     is.na(inventory$Delete)  &
+                                     CheckDateFormat(inventory$Date)<as.Date(end_date)]
+  
+
   print(PercMaxBadPixels)
   # 
-  
   dates_topredict = dates_topredict[!is.na(dates_topredict)]
   dates_topredict = c(dates_topredict[1],dates_topredict[2:length(dates_topredict)][diff(as.Date(dates_topredict))>4])
-  
+  print(dates_topredict)
   DateInt = as.character(dates_topredict)[4]
   lapply(as.character(dates_topredict), function(DateInt){
     cat(DateInt,' \n')
@@ -110,7 +112,7 @@ lapply(tiles, function(tile){
       ### get interpolation time series per pixel
       if(tile == "north_tolima"){
         sat_ref_path =  'D:/OneDrive - Universidad Nacional de Colombia/MScPhil/disease_identification/spatial_data/field_ref_north_tolima.tif'
-        TableValuesToClassify = calculate_interpolation_series (images_data = vi_images, date_int = enddate, veg_indexes = indexes,
+        TableValuesToClassify = calculate_interpolation_series (images_data = vi_images, date_int = enddate, veg_indexes = indexes,summaryts = T,
                                                                 image_reference_path =sat_ref_path,num_process = 6)
       }
       if(tile == "col_t1"){

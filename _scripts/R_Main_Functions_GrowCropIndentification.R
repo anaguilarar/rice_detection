@@ -12,8 +12,15 @@
 setPathStyle=function(pathOrig){ifelse(str_sub(pathOrig,-1)=="/",pathOrig,paste0(pathOrig,"/"))}
 
 ### 
+initial_path = sys.frame(1)$ofile
+
+if(is.null(initial_path)){
+    initial_path = getwd()
+}else{
+    initial_path = dirname(sys.frame(1)$ofile)
+}
 initconf = 
-  read.table(paste0(dirname(sys.frame(1)$ofile),"//init_configuration.txt"), header = FALSE, sep = "=")
+  read.table(paste0(initial_path,"//init_configuration.txt"), header = FALSE, sep = "=")
 
 
 
@@ -98,6 +105,7 @@ create_quicklooks = function(inventory,
                              quicklooks_path, remove_clouds =T, 
                              band_combination = c("red", "green","blue"),
                              exportasrdata = F){
+  library(ggplot2)
   
   satellite_image = get_optical_imagery(inventory,start_date, end_date,band_combination,bad_pixels_limit =100,remove_clouds,
                                  imagesto_delete = NA)
@@ -991,7 +999,7 @@ get_spatialpoints = function(image_reference){
 
 
 calculate_interpolation_series = function(images_data, date_int, veg_indexes,
-                                          image_reference_path = NA, parallel_process = TRUE, 
+                                          image_reference, parallel_process = TRUE, 
                                           num_process = 5, summaryts = T){
   
   ## Set range time
@@ -999,15 +1007,6 @@ calculate_interpolation_series = function(images_data, date_int, veg_indexes,
   rangeDate=c(as.Date(date_int,format="%Y%m%d")-96,(as.Date(date_int,format="%Y%m%d")+0))
   nDaysPoints=length(rangeDate[1]:rangeDate[2])/16
   
-  #### reorganice data
-  
-  if(is.na(image_reference_path)){
-    image_reference =  images_data[[1]][[1]]
-  }else{
-    # if the file is geven it means that this is the rice layer
-    image_reference =  raster(image_reference_path)
-    image_reference[image_reference[] == 1]=NA
-  }
   
   ## get spatial grid for extracting satellite data
   spatial_grid =  get_spatialpoints(image_reference)
@@ -1103,7 +1102,7 @@ calculate_interpolation_series = function(images_data, date_int, veg_indexes,
     }))
     row.names(summaryValues)=row.names(data_reshape)
     
-    TableValuesToClassify = cbind(TableValuesToClassify,derivativeValues,summaryValues)
+    TableValuesToClassify = cbind(TableValuesToClassify,summaryValues)
     
   }
 
@@ -1169,17 +1168,36 @@ timeseriesmetrics = function(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints, cro
     #36
     kernel_regres=ksmooth(df_to_fit$x, df_to_fit$y, "normal",
                           bandwidth = bd,n.points = nDaysPoints,range.x = rangeDate)
-    # test
+    
+    
     regression_vals = kernel_regres$y
+    # # test
+    
+    # df_regression = data.frame(x = kernel_regres$x,
+    #                            y = kernel_regres$y)
+    # df_smoothed = data.frame(x = df_to_fit$x, y = data_tosmooth)
+    # df_smoothed$type = "after Savitsky-Golay filtering"
+    # df_to_fit$type = "Original time-series"
+    # df_regression$type = "after kernel regression fitting"
+    # df_plot = rbind(df_to_fit[,-1],df_smoothed, df_regression)
+    # df_plot$x = as.Date(df_plot$x, origin = "1970-01-01")
+    # df_plot$type = factor(df_plot$type , levels = c("Original time-series","after Savitsky-Golay filtering","after kernel regression fitting"))
+    # m = ggplot(df_plot, aes(x, y , colour= type) ) + 
+    #   geom_point(size = 2 , aes( shape = type), data = df_plot) + 
+    #   geom_line(alpha = 0.6)+
+    #   labs(x = "Dates", y = "NDVI", colour = "Time-series type")+
+    #   theme(text=element_text(size=12),
+    #         axis.title.y=element_text(size = rel(1.1),colour = "black", face="bold"),
+    #         axis.title.x=element_text(size = rel(1.1),colour = "black", face="bold"),
+    #         axis.text.x  = element_text(angle=0, hjust=0.5),
+    #         panel.background=element_rect(fill="white",colour = "black"),
+    #         panel.grid.major = element_line(colour = "gray"),
+    #         legend.title = element_text(face = "bold"))
     # 
-    plot(kernel_regres$x,kernel_regres$y, col = 'blue',ylim=c(0, 0.95),
-         xlim= c(min(df_to_fit$x),max(kernel_regres$x)), pch = 16)
-
-    points(df_to_fit$x,data_tosmooth, col="red")
-
-    points(df_to_fit$x,df_to_fit$y, col = 'gray30')
-    # points(kernel_regres_cross$x, kernel_regres_cross$y)
-    # points(kernel_regres_cross$x, kernel_regres_cross$y, col ='green')
+    # m+  scale_shape_discrete(name  ="Time-series type",
+    #                          
+    #                          breaks=names(phasecolours),
+    #                          labels=names(phasecolours))
 
     
     ## ## cross correlation
@@ -1348,48 +1366,72 @@ timeseriesmetrics = function(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints, cro
 
 SmoothAllPixels=function(DateInt,ImagesInfo,Veg_Indexes,rangeDate,nDaysPoints,parallelProcess=F,ncores=2,crosscorr = F){
   ## Stimate time
+  
   if(parallelProcess){
-    sfInit(parallel=T,cpus=ncores)
-    sfLibrary("snowfall", character.only=TRUE)
-    sfLibrary(stringr)
-    sfLibrary(ff)
-
-    
-    
-    sfExport("DateInt")
-    sfExport("ImagesInfo")
-    
-    sfExport("timeseriesmetrics")
-    sfExport("Veg_Indexes")
-    sfExport("IdentiyImageDate")
-    sfExport("rangeDate") 
-    sfExport("nDaysPoints")
-    sfExport("crosscorr")
-    
     Sys.time()->start
-    resultsKernel=sfLapply(1:nrow(ImagesInfo),function(j){
-      
-      ImagesInfo_PerPixel=ImagesInfo[j,]
-      
-      return(lapply(Veg_Indexes,function(VI){
-        data_PerPixel_VI  = ImagesInfo_PerPixel[grepl(names(ImagesInfo_PerPixel), pattern =VI)]
-        Smooth_VI = timeseriesmetrics(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints)
-        # graph_ = data.frame(x = Smooth_VI$x , y = Smooth_VI$y)
-        # ggplot(graph_, aes(x , y ))+geom_point()+geom_line(alpha = 0.8)
-        # 
-        
-        return(Smooth_VI)
-      }))
-    })
-    
-    
+    cl <- parallel::makeCluster(ncores)
+    doParallel::registerDoParallel(cl)
+    resultsKernel=foreach(j = 1:nrow(ImagesInfo), 
+            .export = c("DateInt", "ImagesInfo","timeseriesmetrics","Veg_Indexes",
+                        "IdentiyImageDate","rangeDate","nDaysPoints","crosscorr"))%dopar% {
+                          
+
+                          library(stringr)
+                          ImagesInfo_PerPixel=ImagesInfo[j,]
+                          
+                          return(lapply(Veg_Indexes,function(VI){
+                            data_PerPixel_VI  = ImagesInfo_PerPixel[grepl(names(ImagesInfo_PerPixel), pattern =VI)]
+                            Smooth_VI = timeseriesmetrics(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints)
+                            # graph_ = data.frame(x = Smooth_VI$x , y = Smooth_VI$y)
+                            # ggplot(graph_, aes(x , y ))+geom_point()+geom_line(alpha = 0.8)
+                            # 
+                            
+                            return(Smooth_VI)
+                          }))
+                        }
+    parallel::stopCluster(cl)
     print(Sys.time()-start)
-    sfStop()
+    # sfInit(parallel=T,cpus=ncores)
+    # sfLibrary("snowfall", character.only=TRUE)
+    # sfLibrary(stringr)
+    # sfLibrary(ff)
+    # 
+    # 
+    # 
+    # sfExport("DateInt")
+    # sfExport("ImagesInfo")
+    # 
+    # sfExport("timeseriesmetrics")
+    # sfExport("Veg_Indexes")
+    # sfExport("IdentiyImageDate")
+    # sfExport("rangeDate") 
+    # sfExport("nDaysPoints")
+    # sfExport("crosscorr")
+    # 
+    # Sys.time()->start
+    # resultsKernel=sfLapply(1:nrow(ImagesInfo),function(j){
+    #   
+    #   ImagesInfo_PerPixel=ImagesInfo[j,]
+    #   
+    #   return(lapply(Veg_Indexes,function(VI){
+    #     data_PerPixel_VI  = ImagesInfo_PerPixel[grepl(names(ImagesInfo_PerPixel), pattern =VI)]
+    #     Smooth_VI = timeseriesmetrics(data_PerPixel_VI,DateInt,rangeDate,nDaysPoints)
+    #     # graph_ = data.frame(x = Smooth_VI$x , y = Smooth_VI$y)
+    #     # ggplot(graph_, aes(x , y ))+geom_point()+geom_line(alpha = 0.8)
+    #     # 
+    #     
+    #     return(Smooth_VI)
+    #   }))
+    # })
+    # 
+    # 
+    # print(Sys.time()-start)
+    # sfStop()
     
   }else{
     resultsKernel=lapply(1:nrow(ImagesInfo),function(j){
       #4805978
-      which(row.names(ImagesInfo)%in% "3429023")
+      #which(row.names(ImagesInfo)%in% "3429023")
       ImagesInfo_PerPixel=ImagesInfo[j,]
       cat(paste("interation ", j))
       return(lapply(Veg_Indexes,function(VI){
@@ -1425,4 +1467,292 @@ ExtractInfo=function(SentinelimageReference,ImagesRiceZones,coordLevels,LevelsWN
     cat("The information in", nameImage,"was extracted\n")
     return(dataExtract)
   }))
+}
+
+
+
+########################## get phenological phases classification#############
+
+
+classify_growth_phasesperdate = function(tile, DateInt, sat_ref_path, 
+                                         pathtomodels, output_pathimages,
+                                         model_id = "all", PercMaxBadPixels=50, classnumber = 2,ncores = 6){
+  
+  
+  ## Vegetation indexes
+  indexes = "NDVI" ## the model only works with NDVI, but the idea is to explore other indexes
+  
+  ## get inventory
+  inventory = get_inventory(tile)
+  
+  ## Period
+  startdate=CheckDateFormat(DateInt)-130
+  enddate=CheckDateFormat(DateInt)
+  
+  
+  ## extract satellite data
+  vi_images = get_vi_layers(inventory = inventory , veg_indexes = indexes, startdate, enddate,
+                            PercMaxBadPixels = PercMaxBadPixels)
+  cat("Images loaded\n")
+  ## there must be ehough data to process the date of interest
+  if(length(vi_images)>4){
+    
+    ## create a raster reference
+    ## a case where there is not a given reference image
+    
+    if(is.na(sat_ref_path)){
+      ref_image = vi_images[[1]]
+      ref_image[!is.na(ref_image)]=classnumber
+    }else{
+      
+      ## read a raster reference
+      if(stringr::str_sub(sat_ref_path,-4,-1) == ".tif"){
+        ref_image = raster(sat_ref_path)
+        ref_image[!ref_image[]==classnumber]=NA
+        
+      }
+      ## read shapefile
+      
+      if(stringr::str_sub(sat_ref_path,-4,-1) == ".shp"){
+        ref_image = mask_raster(sat_ref_path, vi_images[[1]])
+        ref_image[!is.na(ref_image)]=classnumber
+      }
+    }
+    
+    
+    ## calculate metrics
+    
+    TableValuesToClassify = calculate_interpolation_series (images_data = vi_images, date_int = enddate, 
+                                                            veg_indexes = indexes,
+                                                            summaryts = T,
+                                                            image_reference =ref_image,num_process = ncores)
+    rm(vi_images)
+    
+    ##### remove rows with na
+    
+    LevelsWNA_SecondFilter=unique(unlist(sapply(1:ncol(TableValuesToClassify),function(columnVal){which(is.na(TableValuesToClassify[,columnVal]))})))
+    LevelsWNA_SecondFilter=LevelsWNA_SecondFilter[order(LevelsWNA_SecondFilter)]
+    
+    if(length(LevelsWNA_SecondFilter)!=0){
+      TableValuesToClassify_WithoutNA=TableValuesToClassify[-c(LevelsWNA_SecondFilter),]
+    }else{
+      TableValuesToClassify_WithoutNA=TableValuesToClassify
+    }
+    datable = TableValuesToClassify_WithoutNA
+    ### classify data into growth phases
+    output_layers = classify_growthphases(datable, 
+                                          pathtomodels,
+                                          ref_image, 
+                                          model_id = "all")
+    
+    plot(stack(output_layers))
+    ## export layers
+    
+    temp = lapply(names(output_layers), function(x){
+      dir.create(paste0(setPathStyle(output_pathimages),tile,'/',x,'/'),showWarnings = F)
+      
+      writeRaster(output_layers[[x]], filename=paste0(setPathStyle(output_pathimages),tile,'/',x,'/',tile,"_",x,"_ndvits_summary_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),".tif"), format="GTiff",overwrite=T)
+      
+      paste0(tile,"_",x,"_ndvits_summary_",as.character(CheckDateFormat(DateInt),format("%Y%m%d")),".tif image created \n")
+      
+    })
+    
+    return(temp)
+    
+  }else{
+    print('not enough images\n')
+  }
+}
+
+
+mask_raster = function(shp_file_path,raster_image){
+  
+  library(raster)
+  library(rgdal)
+  
+  datashape = readOGR(shp_file_path)
+  
+  ## raster projection 
+  crs_raster = crs(raster_image)
+  
+  ## check projection
+  if(!as.character(crs(datashape)) == as.character(crs_raster)){
+    datashape = spTransform(datashape, crs_raster)
+  }
+  
+  ## clip and export image
+  
+  return(raster::mask(raster_image,datashape))
+  
+}
+
+## 
+classify_growthphases =  function(datable, 
+                                  models_filepath,
+                                  satimage_ref, 
+                                  model_id = "all"){
+  
+  listlayers = list()
+  ## XGBOOST
+  if(model_id == "xgboost" | model_id == "all"){
+    filename_model = list.files(models_filepath,full.names = T)[grep(x=list.files(models_filepath), pattern = "xgboost")]
+    output_image = classify_xgboost(datable, filename_model, satimage_ref)
+    names(output_image) = "xgboost"
+    listlayers["xgboost"] = output_image
+  }
+  ## RF
+  if(model_id == "rf" | model_id == "all"){
+    filename_model = list.files(models_filepath,full.names = T)[grep(x=list.files(models_filepath), pattern = "rf")]
+    output_image = classify_rf(datable, filename_model, satimage_ref)
+    names(output_image) = "rf" 
+    listlayers["rf"] = output_image
+  }
+  ## SVM RADIAL
+  if(model_id == "svm_radial" | model_id == "all"){
+    filename_model = list.files(models_filepath,full.names = T)[grep(x=list.files(models_filepath), pattern = "svm_radial")]
+    output_image = classify_svm(datable, filename_model, satimage_ref)
+    names(output_image) = "svm_radial" 
+    listlayers["svm_radial"] = output_image
+  }
+  ## SVM POLYNOMIAL
+  if(model_id == "svm_polynomial" | model_id == "all"){
+    filename_model = list.files(models_filepath,full.names = T)[grep(x=list.files(models_filepath), pattern = "svm_polynomial")]
+    output_image = classify_svm(datable, filename_model, satimage_ref)
+    names(output_image) = "svm_polynomial" 
+    listlayers["svm_polynomial"] = output_image
+  }
+  return(listlayers)
+}
+
+classify_xgboost = function(datable,filename_model,sat_image){
+  
+  library(xgboost)
+  
+  load( file =filename_model)
+  feature_names=model$feature_names
+  ## transform data to xgboost matrix
+  data_toclassxgboost = xgboost::xgb.DMatrix(as.matrix(datable[,feature_names]),  missing = NA)
+  ## classy data
+  classoutput=predict(model,data_toclassxgboost)
+  ## select the best score
+  classoutput <- matrix(classoutput, ncol = 6, byrow = TRUE)
+  classoutput <- apply(classoutput, 1, which.max)
+  ## Spatialize categories
+  sat_image[]=NA
+  sat_image[as.numeric(row.names(datable))]=classoutput
+  
+  return(sat_image)
+}
+
+# RF
+
+classify_rf = function(datable,filename_model,sat_image){
+  
+  library(randomForest)
+  load( file =filename_model)
+  feature_names=row.names(model$importance)
+  ## classy data
+  classoutput=as.numeric(as.character(predict(model,datable[,feature_names])))
+  ## 
+  ## Spatialize categories
+  sat_image[]=NA
+  sat_image[as.numeric(row.names(datable))]=(classoutput+1)
+  return(sat_image)
+}
+
+# 
+
+
+
+get_featuresmin_maxvals = function(dataf){
+  ## number of features
+  num_features = ncol(dataf)
+  
+  #calculate minimun and maximun values
+  minmax_list =lapply(1:num_features, function(x){
+    
+    return(c(min(dataf[,x]),max(dataf[,x])))
+  })
+  
+  ### rename list
+  names(minmax_list) = names(dataf)
+  return(minmax_list)
+}
+# 
+feature_scaling =  function(feature, limits = c(0,1), type = "min_max"){
+  
+  ## calculate min max feature scaling
+  (feature  - limits[1])/(limits[2]-limits[1])
+  
+}
+
+scale_data_formodels = function(datatable,min_maxvalues, summaryts=T){
+  
+  numfeatures = length(names(datatable))
+  dates_pos = grepl("Date", names(min_maxvalues))
+  
+  #
+  # ###
+  #
+  min_dates = min(unlist(min_maxvalues[dates_pos]))
+  max_dates = max(unlist(min_maxvalues[dates_pos]))
+  # 
+  # ## calculate min max derivatives
+  # 
+  deriva_pos = grepl("deriva",  names(min_maxvalues))
+  
+  min_der = min(unlist(min_maxvalues[deriva_pos]))
+  max_der = max(unlist(min_maxvalues[deriva_pos]))
+  
+  
+  dates_scaled = do.call(cbind,lapply(which(dates_pos),function(x){
+    feature_scaling(datatable[,x], c(min_dates, max_dates))
+  }))
+  
+  derivatives_scaled = do.call(cbind,lapply(which(deriva_pos),function(x){
+    feature_scaling(datatable[,x], c(min_der, max_der))
+  }))
+  
+  x_variables_scaled = data.frame(cbind(dates_scaled,
+                                        derivatives_scaled))
+  
+  if(summaryts){
+    
+    summarize_scaled = do.call(cbind,lapply((1:numfeatures)[-c(which(dates_pos),which(deriva_pos))],function(x){
+      feature_scaling(datatable[,x], min_maxvalues[[x]])
+    }))
+    
+    #
+    # ##
+    x_variables_scaled = data.frame(cbind(dates_scaled,
+                                          derivatives_scaled,
+                                          summarize_scaled
+    ))
+    
+  }
+  names(x_variables_scaled) = names(datatable)
+  return(x_variables_scaled)
+}
+
+classify_svm = function(datable,filename_model,sat_image){
+  
+  library(e1071)
+  load( file =filename_model)
+  
+  ## organice 
+  
+  minmaxvalues = model$min_maxvalues
+  feature_names=names(model$min_maxvalues)
+  
+  ##
+  scaled_data = scale_data_formodels(datable[,feature_names] , minmaxvalues)
+  
+  ## classy data
+  
+  classoutput = as.numeric(unname(predict(model$model,scaled_data)))
+  
+  ## Spatialize categories
+  sat_image[]=NA
+  sat_image[as.numeric(row.names(datable))]=(classoutput)
+  return(sat_image)
 }

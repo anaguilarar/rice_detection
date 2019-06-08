@@ -94,7 +94,7 @@ phase_stages = c("vegetative","harvested","reproductive","ripening")
 #    "early_vegetative"="cyan4", "reproductive" = "darkgreen","late_vegetative" = "chartreuse3 ,"soil" = "saddlebrown""
 # )
 phasecolours = c ('harvested'='firebrick3', "ripening"="goldenrod", 
-                  "reproductive" = "darkgreen","vegetative" = "lightgreen", "soil" = "saddlebrown"
+                  "reproductive" = "darkgreen","vegetative" = "darkolivegreen3", "soil" = "saddlebrown"
 )
 
 ## plot initial state
@@ -157,16 +157,36 @@ lapply(levels(data_plot2$field_name), function(rice_field){
 
 
 ### second graph : Boxplot
-data_date = do.call(rbind,lapply(c("20151127","20151211","20151228","20160114","20160123"), function(date_campaign){
-  data_plot[data_plot$date %in% date_campaign & 
-              data_plot$capturing_date<=CheckDateFormat(date_campaign),]
+data_date = do.call(rbind,lapply(c("20151127","20151211","20151228","20160114","20160123"),
+                                 function(date_campaign){
+                                   
+                                   data_plot = data_plot[data_plot$date %in% date_campaign & 
+              data_plot$capturing_date<=CheckDateFormat(date_campaign)&
+              data_plot$capturing_date>=(CheckDateFormat(date_campaign)-130),]
+                                   
+                                   
 }))
 
 lines_plot = data.frame(group_by(data_date, class,date,capturing_date) %>%summarise(ndvi = median(LSWI, na.rm = T)))
 data_date$temp = paste0(data_date$capturing_date, data_date$class)
 
-m = ggplot(data_date, aes(as.factor(capturing_date), NDVI ,group = temp)) + 
-  theme_bw() + labs( fill = "Growth Stage", x = "Satellite Date")+ 
+data_date$date = as.factor(data_date$date)
+levels(data_date$date)= c("27-11-2015", "11-12-2015", 
+                                                   "28-12-2015","14-01-2015","23-01-2016")
+
+
+data_date$class = as.factor(as.character(data_date$class))
+data_date$class = factor(as.character(data_date$class), levels = c("vegetative","reproductive","ripening","harvested"))
+m = ggplot(data_date, aes(as.factor(capturing_date), NDVI ,group = temp)) +
+  
+  theme(text=element_text(size=12),
+        axis.title.y=element_text(size = rel(1.1),colour = "black", face="bold"),
+        axis.title.x=element_text(size = rel(1.1),colour = "black", face="bold"),
+        axis.text.x  = element_text(angle=30, hjust=1),
+        panel.background=element_rect(fill="white",colour = "black"),
+        panel.grid.major = element_line(colour = "gray"),
+        legend.title = element_text(face = "bold"))+ 
+  labs( fill = "Growth Phase", x = "Satellite acquisition date")+ 
   geom_boxplot(aes(fill = class), alpha = .60)+lims(y = c(0,1))+ 
   stat_summary(fun.y=median, geom="line", aes(colour = class,group = class), size = 1.4)+ 
   stat_summary(fun.y=median, geom="point", aes(colour = class,group = class), size = 1.8)+
@@ -176,7 +196,7 @@ m = ggplot(data_date, aes(as.factor(capturing_date), NDVI ,group = temp)) +
 m = m+ guides(colour=FALSE)+scale_colour_manual(values = phasecolours)+
   scale_fill_manual(values = phasecolours)
 
-ggsave(plot = m , filename = paste0("graphics/ndvi_time_seriesunclean_boxplot_veg.jpg"),
+ggsave(plot = m , filename = paste0("D:/OneDrive - Universidad Nacional de Colombia/MScPhil/figures/ndvi_time_seriesunclean_boxplot_veg.jpg"),
        width = 30, height = 20, units = "cm")
 
 
@@ -576,15 +596,20 @@ data_training$class [data_training$class %in% c("Urban_Zones", "Water")] = "othe
 unique(data_training$class)
 
 ###
-phasecolours = c ('harvested'='firebrick3', "ripening"="goldenrod", 
-                  "reproductive" = "darkgreen","vegetative" = "lightgreen", "soil" = "saddlebrown"
-)
 
-ggplot(data_training[data_training$class %in% c("harvested"),], aes(NDVI_derivative_1,NDVI_derivative_2, color = class)) + 
+ggplot(data_training, aes(NDVI_derivative_1,NDVI_derivative_2, color = class)) + 
   geom_point()+xlim(-0.03,0.04)+ylim(-0.045,0.04)+
-  scale_colour_manual(values = c ('harvested'='firebrick3', "ripening"="goldenrod", "other" = "gray", 
-                                  "vegetative"="lightgreen", "reproductive" = "darkgreen", "soil" = "saddlebrown"
-  )) + theme_bw() + labs (x = "initial_NDVI_derivative", y = "ending_NDVI_derivative", colour = "Classification")
+  scale_colour_manual(values = c(phasecolours, other = "gray19")
+  ) + theme_bw() + 
+  labs (x = "initial_NDVI_derivative", y = "ending_NDVI_derivative", colour = "Classification")+
+  labs(y = "first_derivative_tsending", x = "first_derivative_tsstarting ", colour = "Growth Phase")+
+    theme(text=element_text(size=12),
+          axis.title.y=element_text(size = rel(1.1),colour = "black", face="bold"),
+          axis.title.x=element_text(size = rel(1.1),colour = "black", face="bold"),
+          axis.text.x  = element_text(angle=0, hjust=0.5),
+          panel.background=element_rect(fill="white",colour = "black"),
+          panel.grid.major = element_line(colour = "gray"),
+          legend.title = element_text(face = "bold"))
 
 ###
 
@@ -969,10 +994,47 @@ write.csv(data_training ,
           paste0("model_inputs/phen_identification/optical_data_ndvi_date_deri_veg.csv"))
 
 
+data_training = read.csv(paste0("model_inputs/phen_identification/optical_data_ndvi_date_deri_veg.csv"),row.names =1)
+
+
+graphic_s = graphic_smoothed (data_training, vi =  "NDVI_Date_", limitbottom = 0,limitup =1)
+head(graphic_s$data)
+dataplot = graphic_s$data[graphic_s$data$Typ_Stg%in%c ('harvested', "ripening" ,
+                                                       "vegetative", "reproductive" ,"soil","other"),]
+
+
+dataplot = dataplot[dataplot$variable%in% paste0("NDVI_Date_",1:7),]
+dataplot$variable = as.factor(as.character(dataplot$variable)) 
+levels(dataplot$variable ) = paste0("NDVI_",1:7)
+dataplot$Typ_Stg = factor(dataplot$Typ_Stg, levels = c("vegetative", "reproductive", 
+                                                       "ripening", "harvested","soil","other"))
+m = ggplot(dataplot, 
+           aes(as.factor(variable), value )) + 
+  geom_boxplot(aes(fill = Typ_Stg, colour = Typ_Stg), alpha = 0.2)+
+  lims(y = c(-0.035,1))+ theme_bw() + 
+  labs( fill = "Classification", y = "NDVI", x = "")+ 
+  stat_summary(fun.y=median, geom="line", aes(colour = Typ_Stg,group = Typ_Stg), size = 1.4)+ 
+  stat_summary(fun.y=median, geom="point", aes(colour = Typ_Stg,group = Typ_Stg), size = 1.8)      
 
 
 
+m=m+ guides(colour=FALSE)+
+  scale_colour_manual(values = c(phasecolours, other = "gray19"))+
+  scale_fill_manual(values = c(phasecolours, other = "gray19"))
+m+labs(x = "Features", y = "NDVI", fill = "Growth Phases")+
+    theme(text=element_text(size=12),
+          axis.title.y=element_text(size = rel(1.1),colour = "black", face="bold"),
+          axis.title.x=element_text(size = rel(1.1),colour = "black", face="bold"),
+          axis.text.x  = element_text(angle=0, hjust=0.5),
+          panel.background=element_rect(fill="white",colour = "black"),
+          panel.grid.major = element_line(colour = "gray"),
+          legend.title = element_text(face = "bold"))
 
+
++ stat_summary(fun.data="mean_sdl", fun.args = list(mult=1), 
+                   geom="crossbar", width=0.5)+
+  stat_summary(fun.data=mean_sdl, fun.args = list(mult=1), 
+               geom="pointrange", color="red")
 
 
 
